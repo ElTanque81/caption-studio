@@ -383,12 +383,49 @@ function renderResults() {
     tabs.append(t);
   }
 
+  if (ids.length > 1) {
+    const all = button("Copy all platforms", "mini copy-all", () => {
+      copy(allText(r, ids), `Copied ${ids.length} platforms`);
+    });
+    tabs.append(all);
+  }
+
   const p = PLATFORMS.find((x) => x.id === state.tab);
   r.byPlatform[state.tab].forEach((v, i) => box.append(renderTag(p, v, i)));
 }
 
 function fullText(v) {
   return v.hashtags.length ? `${v.text}\n\n${v.hashtags.map((h) => "#" + h).join(" ")}` : v.text;
+}
+
+function allText(r, ids) {
+  return ids.map((id) => {
+    const p = PLATFORMS.find((x) => x.id === id);
+    const variants = r.byPlatform[id].map((v, i) => `Variant ${i + 1}\n${fullText(v)}`).join("\n\n");
+    return `===== ${p.name} =====\n\n${variants}`;
+  }).join("\n\n\n");
+}
+
+/* Sharing. X and LinkedIn open a pre-filled post; Instagram, TikTok and
+   Pinterest have no way to pre-fill text from a link, so the text is copied
+   and the site opens for the user to paste it next to their photo or video. */
+const enc = encodeURIComponent;
+const SHARE = {
+  x:         { label: "Post on X",        prefill: true,  url: (t) => `https://x.com/intent/tweet?text=${enc(t)}` },
+  linkedin:  { label: "Post on LinkedIn", prefill: true,  url: (t) => `https://www.linkedin.com/feed/?shareActive=true&text=${enc(t)}` },
+  instagram: { label: "Open Instagram",   prefill: false, url: () => "https://www.instagram.com/" },
+  tiktok:    { label: "Open TikTok",      prefill: false, url: () => "https://www.tiktok.com/upload" },
+  pinterest: { label: "Open Pinterest",   prefill: false, url: () => "https://www.pinterest.com/pin-builder/" },
+};
+
+function share(p, v) {
+  const s = SHARE[p.id];
+  const text = fullText(v);
+  // Open first, inside the click, so the browser treats it as user-initiated.
+  window.open(s.url(text), "_blank", "noopener,noreferrer");
+  copy(text, s.prefill
+    ? `${p.name} opened with your post. Text is also copied.`
+    : `Copied. Paste it into your ${p.name} post.`);
 }
 
 function renderTag(p, v, index) {
@@ -418,6 +455,11 @@ function renderTag(p, v, index) {
 
   const actions = document.createElement("div");
   actions.className = "tag-actions";
+  if (SHARE[p.id]) {
+    const sh = button(SHARE[p.id].label, "mini share", () => share(p, v));
+    sh.title = SHARE[p.id].prefill ? `Opens ${p.name} with this text filled in` : `Copies the text and opens ${p.name}`;
+    actions.append(sh);
+  }
   actions.append(
     button("Copy", "mini copy", () => copy(fullText(v))),
     button("Shorter", "mini", () => rewrite(el, p, index, "Make it about 40% shorter. Keep the strongest idea.")),
@@ -465,7 +507,7 @@ Hashtags: ${v.hashtags.join(", ") || "(none)"}`;
     const [next] = parseVariants(await ask(prompt, 700));
     r.byPlatform[p.id][index] = { text: next.text, hashtags: p.hashtags === 0 ? [] : (next.hashtags.length ? next.hashtags : v.hashtags) };
     save(KEYS.history, state.history);
-    const fresh = renderTag(p, r.byPlatform[p.id][index], 0);
+    const fresh = renderTag(p, r.byPlatform[p.id][index], index);
     fresh.style.animationDelay = "0ms";
     el.replaceWith(fresh);
   } catch (err) {
@@ -475,7 +517,7 @@ Hashtags: ${v.hashtags.join(", ") || "(none)"}`;
   }
 }
 
-async function copy(text) {
+async function copy(text, message = "Copied") {
   try {
     await navigator.clipboard.writeText(text);
   } catch {
@@ -488,7 +530,7 @@ async function copy(text) {
     document.execCommand("copy");
     ta.remove();
   }
-  toast("Copied");
+  toast(message);
 }
 
 let toastTimer;
@@ -497,7 +539,7 @@ function toast(msg) {
   t.textContent = msg;
   t.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove("show"), 1800);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2800);
 }
 
 /* --------------------------------------------------------------- history */

@@ -16,6 +16,7 @@ Small sellers write the same kind of copy every day: a shop listing, then an Ins
 - **Six platforms.** Shop listing, Instagram, TikTok, Pinterest, LinkedIn and X, each with its own length, structure and hashtag count.
 - **Several angles per platform.** Benefit, story, feeling, practical detail.
 - **Length check.** Each variant shows its length against the platform limit and turns red when it is too long.
+- **Share in one click.** "Post on X" and "Post on LinkedIn" open a pre-filled post. For Instagram, TikTok and Pinterest the text is copied and the site opens, ready to paste next to your photo or video. "Copy all platforms" copies everything at once.
 - **One-click rewrites.** Shorter, warmer, or a stronger call to action, per variant.
 - **12 output languages.** Defaults to the user's browser language.
 - **History.** The last 12 results are saved and can be reopened.

@@ -291,6 +291,8 @@ input::placeholder, textarea::placeholder { color: var(--ink-2); opacity: 0.6; }
   cursor: pointer;
 }
 .mini.copy { background: var(--ink); color: var(--desk); border-color: var(--ink); }
+.mini.share { background: var(--c); color: #18233d; border-color: var(--c); font-weight: 600; }
+.mini.copy-all { margin-left: auto; align-self: center; }
 .mini:disabled { opacity: 0.5; cursor: progress; }
 
 .tag.busy .tag-text { background: linear-gradient(90deg, transparent, var(--marker), transparent); background-size: 200% 100%; animation: sweep 1.1s linear infinite; }
