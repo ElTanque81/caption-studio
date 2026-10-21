@@ -1,3 +1,5 @@
+<img src="docs/logo-256.png" alt="Caption Studio logo" width="96">
+
 # Caption Studio
 
 An Anna App that writes product descriptions, social media captions and hashtags in your brand's voice.
@@ -32,7 +34,8 @@ The app calls the host LLM with `anna.llm.complete`. Each platform gets its own 
 | `bundle/index.html` | UI |
 | `bundle/style.css` | Styles, light and dark |
 | `bundle/app.js` | App logic, prompts, storage |
-| `bundle/icon.svg`, `logo.svg` | Window icon and store logo |
+| `bundle/icon.svg`, `logo.svg` | Window icon and store logo (source) |
+| `docs/logo-256.png`, `logo-512.png`, `logo-1024.png` | Store logo as PNG |
 | `fixtures/happy-path.jsonl` | Canned LLM answer for offline testing |
 
 No backend and no Executa: everything runs in the Anna iframe.

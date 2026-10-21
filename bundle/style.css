@@ -101,7 +101,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   margin-bottom: 22px;
 }
 
-.logo { width: 26px; height: 26px; color: var(--ink); flex: none; }
+.logo { width: 30px; height: 30px; color: var(--ink); flex: none; }
 
 h1 {
   font-size: 20px;
