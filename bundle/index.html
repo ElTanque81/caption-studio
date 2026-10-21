@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Caption Studio</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="desk" aria-label="What to write">
+        <header class="masthead">
+          <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><path d="M6 4h14l8 8v16H6z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.2" fill="currentColor"/><path d="M11 18h12M11 23h8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+          <h1>Caption Studio</h1>
+          <span id="conn" class="conn" title="Connection to Anna"></span>
+        </header>
+
+        <form id="brief" autocomplete="off">
+          <div class="field">
+            <div class="row-between">
+              <label for="brand">Brand voice</label>
+              <button type="button" class="link" id="edit-brand">Edit</button>
+            </div>
+            <select id="brand"></select>
+          </div>
+
+          <div class="field">
+            <label for="product">Product</label>
+            <input id="product" required placeholder="Hand-thrown ceramic mug" maxlength="120" />
+          </div>
+
+          <div class="field">
+            <label for="details">What makes it worth buying?</label>
+            <textarea id="details" rows="4" maxlength="1500" placeholder="350 ml, matte sand glaze, dishwasher safe, each one unique, made in Lisbon"></textarea>
+          </div>
+
+          <fieldset class="field">
+            <legend>Where it will be posted</legend>
+            <div id="platforms" class="chips"></div>
+          </fieldset>
+
+          <div class="two">
+            <div class="field">
+              <label for="language">Language</label>
+              <select id="language"></select>
+            </div>
+            <div class="field">
+              <label for="count">Variants</label>
+              <select id="count">
+                <option>2</option>
+                <option selected>3</option>
+                <option>4</option>
+                <option>5</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="cta">Call to action <span class="opt">(optional)</span></label>
+            <input id="cta" maxlength="120" placeholder="Link in bio · 10% off with code KILN10" />
+          </div>
+
+          <button type="submit" class="primary" id="go">Write copy</button>
+          <p id="status" class="status" role="status" aria-live="polite"></p>
+        </form>
+      </aside>
+
+      <main class="rack" aria-label="Results">
+        <nav class="tabs" id="tabs" aria-label="Platforms"></nav>
+        <div id="results" class="results">
+          <div class="empty">
+            <p class="empty-title">Your tags will hang here.</p>
+            <p>Describe a product on the left and choose where it will be posted. Each variant comes with hashtags and a length check for that platform.</p>
+          </div>
+        </div>
+        <section class="history" aria-label="Recent">
+          <h2>Recent</h2>
+          <ul id="history"></ul>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="brand-dialog">
+      <form method="dialog" id="brand-form">
+        <h2>Brand voice</h2>
+        <p class="hint">Saved to your account and used for every text you write.</p>
+        <div class="field"><label for="b-name">Brand name</label><input id="b-name" required maxlength="60" /></div>
+        <div class="field"><label for="b-voice">How it sounds</label><input id="b-voice" maxlength="160" placeholder="Warm, calm, a little witty" /></div>
+        <div class="field"><label for="b-audience">Who buys</label><input id="b-audience" maxlength="160" placeholder="Coffee lovers, 25–45, care about handmade" /></div>
+        <div class="field"><label for="b-avoid">Never say</label><input id="b-avoid" maxlength="200" placeholder="cheap, best ever, game-changer" /></div>
+        <div class="field">
+          <label for="b-emoji">Emoji</label>
+          <select id="b-emoji">
+            <option value="none">None</option>
+            <option value="few" selected>A few</option>
+            <option value="many">Plenty</option>
+          </select>
+        </div>
+        <div class="dialog-actions">
+          <button type="button" class="link danger" id="b-delete">Delete</button>
+          <span class="spacer"></span>
+          <button type="button" class="ghost" id="b-cancel">Cancel</button>
+          <button type="button" class="ghost" id="b-new">Save as new</button>
+          <button type="submit" class="primary small" id="b-save">Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="app.js" type="module"></script>
+  </body>
+</html>

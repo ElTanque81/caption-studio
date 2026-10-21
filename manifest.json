@@ -1,0 +1,45 @@
+{
+  "schema": 3,
+  "required_executas": [],
+  "optional_executas": [],
+  "system_prompt_addendum": "The user has the Caption Studio app open. It writes product descriptions, social media captions and hashtags in a saved brand voice. If the user asks for copy, suggest they use the app window, or help directly following the same platform conventions.",
+  "tags": ["copywriting", "marketing", "social-media", "ecommerce", "captions", "productivity"],
+  "ui": {
+    "bundle": {
+      "format": "static-spa",
+      "entry": "index.html",
+      "external_origins": []
+    },
+    "views": [
+      {
+        "name": "main",
+        "title": "Caption Studio",
+        "default": true,
+        "entry": "index.html",
+        "min_size": { "w": 380, "h": 560 },
+        "default_size": { "w": 920, "h": 760 },
+        "resizable": true,
+        "movable": true,
+        "single_instance": true,
+        "icon": "icon.svg"
+      }
+    ],
+    "host_api": {
+      "llm": ["complete"],
+      "storage": ["get", "set"],
+      "chat": ["write_message"],
+      "window": ["set_title"]
+    },
+    "csp_overrides": {
+      "img-src": ["'self'", "data:"],
+      "style-src": ["'self'"],
+      "script-src": ["'self'"]
+    },
+    "state_merge": "last_writer_wins"
+  },
+  "dev": {
+    "fixtures": ["fixtures/*.jsonl"],
+    "seed_storage": {},
+    "user_id": 1
+  }
+}
