@@ -30,7 +30,32 @@ const PLATFORMS = [
 
 const LANGUAGES = ["English", "Deutsch", "Español", "Français", "Italiano", "Português", "Nederlands", "Polski", "Türkçe", "日本語", "한국어", "中文"];
 
-const KEYS = { brands: "caption-studio:brands", activeBrand: "caption-studio:active-brand", history: "caption-studio:history", last: "caption-studio:last-brief" };
+const KEYS = { brands: "caption-studio:brands", activeBrand: "caption-studio:active-brand", history: "caption-studio:history", last: "caption-studio:last-brief", theme: "caption-studio:theme" };
+
+/* Theme: "auto" follows the system, "light"/"dark" are fixed. Anna does not
+   pass a theme to apps, so the app keeps its own choice. */
+const THEMES = {
+  auto:  { label: "Auto",  next: "light", icon: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 2a6 6 0 0 1 0 12z" fill="currentColor"/></svg>' },
+  light: { label: "Light", next: "dark",  icon: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="currentColor"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6 13 13M3 13l1.4-1.4M11.6 4.4 13 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>' },
+  dark:  { label: "Dark",  next: "auto",  icon: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 10.2A6 6 0 0 1 5.8 2.5a6 6 0 1 0 7.7 7.7z" fill="currentColor"/></svg>' },
+};
+
+function applyTheme(name) {
+  const t = THEMES[name] ? name : "auto";
+  if (t === "auto") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", t);
+  const btn = document.getElementById("theme");
+  if (btn) {
+    btn.innerHTML = `${THEMES[t].icon}<span>${THEMES[t].label}</span>`;
+    btn.dataset.theme = t;
+    btn.setAttribute("aria-label", `Theme: ${THEMES[t].label}. Click to change.`);
+  }
+  try { localStorage.setItem(KEYS.theme, t); } catch {}
+  return t;
+}
+
+// Apply the last choice before anything else renders, to avoid a flash.
+try { applyTheme(localStorage.getItem(KEYS.theme) || "auto"); } catch { applyTheme("auto"); }
 
 const DEFAULT_BRAND = { id: "default", name: "My brand", voice: "Friendly, clear and honest", audience: "", avoid: "", emoji: "few" };
 
@@ -504,7 +529,12 @@ function renderHistory() {
 
 async function boot() {
   renderForm();
+  $("#theme").addEventListener("click", () => {
+    const next = THEMES[$("#theme").dataset.theme || "auto"].next;
+    save(KEYS.theme, applyTheme(next));
+  });
   await connect();
+  applyTheme(await load(KEYS.theme, $("#theme").dataset.theme || "auto"));
 
   state.brands = await load(KEYS.brands, [DEFAULT_BRAND]);
   if (!Array.isArray(state.brands) || !state.brands.length) state.brands = [DEFAULT_BRAND];

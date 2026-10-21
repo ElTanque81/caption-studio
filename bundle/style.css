@@ -19,8 +19,9 @@
   color-scheme: light;
 }
 
+/* Dark palette: follows the system unless the user picked a theme in the app. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --paper: #111827;
     --desk: #18212f;
     --tag: #202a3a;
@@ -33,6 +34,34 @@
     color-scheme: dark;
   }
 }
+:root[data-theme="dark"] {
+  --paper: #111827;
+  --desk: #18212f;
+  --tag: #202a3a;
+  --ink: #e8edf5;
+  --ink-2: #9aa6ba;
+  --line: #334156;
+  --marker: #8a7c1c;
+  --danger: #f2948c;
+  --focus: #8eb0ff;
+  color-scheme: dark;
+}
+
+.theme-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  background: transparent;
+  border-radius: 999px;
+  padding: 4px 10px 4px 8px;
+  font-size: 13px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.theme-btn svg { width: 15px; height: 15px; }
+.theme-btn + .conn { margin-left: 4px; }
 
 * { box-sizing: border-box; }
 
