@@ -6,7 +6,7 @@ An Anna App that writes product descriptions, social media captions and hashtags
 
 Built for the [Anna AI App Builder Program](https://dorahacks.io/hackathon/2349/detail) on DoraHacks.
 
-![Caption Studio running in the Anna app harness](docs/screenshot.png)
+![Caption Studio](docs/screenshots/1-captions.png)
 
 ## What it does
 
@@ -17,7 +17,7 @@ Small sellers write the same kind of copy every day: a shop listing, then an Ins
 - **Several angles per platform.** Benefit, story, feeling, practical detail.
 - **Length check.** Each variant shows its length against the platform limit and turns red when it is too long.
 - **Share in one click.** "Post on X" and "Post on LinkedIn" open a pre-filled post. For Instagram, TikTok and Pinterest the text is copied and the site opens, ready to paste next to your photo or video. "Copy all platforms" copies everything at once.
-- **One-click rewrites.** Shorter, warmer, or a stronger call to action, per variant.
+- **One-click rewrites.** Shorter, warmer, or a stronger call to action, per variant. "Shorter" always returns a shorter text: the result is checked, retried once if needed, and the button switches off once a text can't get shorter without losing its message.
 - **12 output languages.** Defaults to the user's browser language.
 - **History.** The last 12 results are saved and can be reopened.
 - **No invented facts.** The prompt forbids inventing prices, materials, awards or discounts the user did not give.
@@ -36,7 +36,8 @@ The app calls the host LLM with `anna.llm.complete`. Each platform gets its own 
 | `bundle/style.css` | Styles, light and dark |
 | `bundle/app.js` | App logic, prompts, storage |
 | `bundle/icon.svg`, `logo.svg` | Window icon and store logo (source) |
-| `docs/logo-256.png`, `logo-512.png`, `logo-1024.png` | Store logo as PNG |
+| `docs/logo-256.png`, `logo-512.png`, `logo-1024.png` | Store logo as PNG (`logo_file` in app.json) |
+| `docs/screenshots/` | Store screenshots (`screenshots` in app.json, uploaded by `anna-app publish`) |
 | `fixtures/happy-path.jsonl` | Canned LLM answer for offline testing |
 
 No backend and no Executa: everything runs in the Anna iframe.

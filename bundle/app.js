@@ -455,6 +455,12 @@ function renderTag(p, v, index) {
 
   const actions = document.createElement("div");
   actions.className = "tag-actions";
+  const shorten = button("Shorter", "mini shorten", () => rewrite(el, p, index, "shorter"));
+  if (!canShorten(v)) {
+    shorten.disabled = true;
+    shorten.title = "Already as short as it gets";
+  }
+
   if (SHARE[p.id]) {
     const sh = button(SHARE[p.id].label, "mini share", () => share(p, v));
     sh.title = SHARE[p.id].prefill ? `Opens ${p.name} with this text filled in` : `Copies the text and opens ${p.name}`;
@@ -462,9 +468,9 @@ function renderTag(p, v, index) {
   }
   actions.append(
     button("Copy", "mini copy", () => copy(fullText(v))),
-    button("Shorter", "mini", () => rewrite(el, p, index, "Make it about 40% shorter. Keep the strongest idea.")),
-    button("Warmer", "mini", () => rewrite(el, p, index, "Make it warmer and more personal, as if the maker is talking.")),
-    button("Stronger CTA", "mini", () => rewrite(el, p, index, "Keep the idea but end with a clearer, more compelling call to action.")),
+    shorten,
+    button("Warmer", "mini", () => rewrite(el, p, index, "warmer")),
+    button("Stronger CTA", "mini", () => rewrite(el, p, index, "cta")),
   );
 
   el.append(text);
@@ -482,30 +488,78 @@ function button(label, cls, fn) {
   return b;
 }
 
-async function rewrite(el, p, index, instruction) {
-  if (el.classList.contains("busy")) return;
-  const r = state.results;
-  const v = r.byPlatform[p.id][index];
-  const brand = state.brands.find((b) => b.name === r.brand) || activeBrand();
-  el.classList.add("busy");
-  el.querySelectorAll("button").forEach((b) => (b.disabled = true));
-  try {
-    const prompt = `${brandBlock(brand)}
+/* ------------------------------------------------------------- rewrites */
+
+const charLen = (s) => [...String(s)].length;
+
+// Chinese, Japanese and Korean pack far more meaning into one character.
+const isDense = (s) => (String(s).match(/[぀-ヿ㐀-鿿가-힯]/g) || []).length > charLen(s) * 0.3;
+
+// Below this a text has no room left to shorten without losing its point.
+const minLength = (s) => (isDense(s) ? 20 : 50);
+
+const canShorten = (v) => charLen(v.text) > minLength(v.text);
+
+// The platform guide without its word ranges ("40–90 words"). Sending the
+// range made the model grow an already-short text back to the minimum.
+const styleOnly = (guide) => guide.replace(/\s*\d+\s*[–-]\s*\d+\s*words\.?/gi, "").trim();
+
+const REWRITES = {
+  shorter: "Make it shorter. Cut whole phrases rather than rewording. Keep the strongest idea and the call to action.",
+  warmer: "Make it warmer and more personal, as if the maker is talking. Keep about the same length.",
+  cta: "Keep the idea but end with a clearer, more compelling call to action. Keep about the same length.",
+};
+
+function rewritePrompt(brand, p, lang, v, kind, maxChars) {
+  return `${brandBlock(brand)}
 
 Platform: ${p.name}
-Format: ${p.guide}
-Hard limit: ${p.limit} characters.
-Language: ${r.brief.language}
+Style: ${styleOnly(p.guide)}
+Language: ${lang}
 
-Rewrite this ${p.name} text. ${instruction}
+Rewrite this ${p.name} text. ${REWRITES[kind]}
+The new text must be at most ${maxChars} characters long, hashtags not included. The current text is ${charLen(v.text)} characters.
+Use at most ${v.hashtags.length} hashtags.
 Return exactly 1 variant.
 
 Text:
 ${v.text}
 
 Hashtags: ${v.hashtags.join(", ") || "(none)"}`;
-    const [next] = parseVariants(await ask(prompt, 700));
-    r.byPlatform[p.id][index] = { text: next.text, hashtags: p.hashtags === 0 ? [] : (next.hashtags.length ? next.hashtags : v.hashtags) };
+}
+
+async function rewrite(el, p, index, kind) {
+  if (el.classList.contains("busy")) return;
+  const r = state.results;
+  const v = r.byPlatform[p.id][index];
+  const brand = state.brands.find((b) => b.name === r.brand) || activeBrand();
+  const cur = charLen(v.text);
+
+  if (kind === "shorter" && !canShorten(v)) {
+    toast("This one is already as short as it gets.");
+    return;
+  }
+
+  el.classList.add("busy");
+  el.querySelectorAll("button").forEach((b) => (b.disabled = true));
+  try {
+    let next;
+    if (kind === "shorter") {
+      // Aim for about two thirds of the current length, then check the
+      // result: one stricter retry, and never accept a text that got longer.
+      const target = Math.max(minLength(v.text), Math.round(cur * 0.65));
+      for (const maxChars of [target, Math.max(minLength(v.text), Math.round(cur * 0.5))]) {
+        const [cand] = parseVariants(await ask(rewritePrompt(brand, p, r.brief.language, v, kind, maxChars), 700));
+        if (charLen(cand.text) < cur) { next = cand; break; }
+      }
+      if (!next) throw new Error("couldn't make it any shorter without losing the message");
+    } else {
+      const maxChars = Math.min(p.limit, Math.round(cur * 1.15) + 20);
+      [next] = parseVariants(await ask(rewritePrompt(brand, p, r.brief.language, v, kind, maxChars), 700));
+    }
+
+    const hashtags = p.hashtags === 0 ? [] : (next.hashtags.length ? next.hashtags : v.hashtags).slice(0, Math.max(v.hashtags.length, 1));
+    r.byPlatform[p.id][index] = { text: next.text, hashtags };
     save(KEYS.history, state.history);
     const fresh = renderTag(p, r.byPlatform[p.id][index], index);
     fresh.style.animationDelay = "0ms";
@@ -513,7 +567,8 @@ Hashtags: ${v.hashtags.join(", ") || "(none)"}`;
   } catch (err) {
     el.classList.remove("busy");
     el.querySelectorAll("button").forEach((b) => (b.disabled = false));
-    toast("Rewrite failed: " + friendlyError(err));
+    if (kind === "shorter" && !canShorten(v)) el.querySelector(".mini.shorten")?.setAttribute("disabled", "");
+    toast(`${kind === "shorter" ? "Shorter" : "Rewrite"} failed: ${friendlyError(err)}`);
   }
 }
 
