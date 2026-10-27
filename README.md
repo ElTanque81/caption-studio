@@ -17,7 +17,7 @@ Small sellers write the same kind of copy every day: a shop listing, then an Ins
 - **Several angles per platform.** Benefit, story, feeling, practical detail.
 - **Length check.** Each variant shows its length against the platform limit and turns red when it is too long.
 - **Share in one click.** "Post on X" and "Post on LinkedIn" open a pre-filled post. For Instagram, TikTok and Pinterest the text is copied and the site opens, ready to paste next to your photo or video. "Copy all platforms" copies everything at once.
-- **One-click rewrites.** Shorter, warmer, or a stronger call to action, per variant. "Shorter" always returns a shorter text: the result is checked, retried once if needed, and the button switches off once a text can't get shorter without losing its message.
+- **One-click rewrites.** Shorter, longer, warmer, or a stronger call to action, per variant. "Shorter" and "Longer" always move in the right direction: the result is checked in code, retried once if needed, and never accepted if it went the wrong way or past the platform limit. "Longer" only adds detail from the product information the user gave. Each button switches off at a sensible minimum or maximum for the platform.
 - **12 output languages.** Defaults to the user's browser language.
 - **History.** The last 12 results are saved and can be reopened.
 - **No invented facts.** The prompt forbids inventing prices, materials, awards or discounts the user did not give.

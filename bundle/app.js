@@ -456,10 +456,7 @@ function renderTag(p, v, index) {
   const actions = document.createElement("div");
   actions.className = "tag-actions";
   const shorten = button("Shorter", "mini shorten", () => rewrite(el, p, index, "shorter"));
-  if (!canShorten(v)) {
-    shorten.disabled = true;
-    shorten.title = "Already as short as it gets";
-  }
+  const lengthen = button("Longer", "mini lengthen", () => rewrite(el, p, index, "longer"));
 
   if (SHARE[p.id]) {
     const sh = button(SHARE[p.id].label, "mini share", () => share(p, v));
@@ -469,14 +466,30 @@ function renderTag(p, v, index) {
   actions.append(
     button("Copy", "mini copy", () => copy(fullText(v))),
     shorten,
+    lengthen,
     button("Warmer", "mini", () => rewrite(el, p, index, "warmer")),
     button("Stronger CTA", "mini", () => rewrite(el, p, index, "cta")),
   );
+  applyLengthLimits(actions, p, v);
 
   el.append(text);
   if (v.hashtags.length) el.append(tags);
   el.append(meter, actions);
   return el;
+}
+
+// Switch off Shorter/Longer when a text can't move further in that direction.
+function applyLengthLimits(scope, p, v) {
+  const s = scope.querySelector(".mini.shorten");
+  const l = scope.querySelector(".mini.lengthen");
+  if (s) {
+    s.disabled = !canShorten(v);
+    s.title = s.disabled ? "Already as short as it gets" : "";
+  }
+  if (l) {
+    l.disabled = !canLengthen(p, v);
+    l.title = l.disabled ? `Already as long as works well on ${p.name}` : "";
+  }
 }
 
 function button(label, cls, fn) {
@@ -500,25 +513,45 @@ const minLength = (s) => (isDense(s) ? 20 : 50);
 
 const canShorten = (v) => charLen(v.text) > minLength(v.text);
 
+// Longest text (hashtags excluded) that still reads well on each platform,
+// and never past the platform's hard limit once the hashtags are added.
+const COMFORT_MAX = { shop: 1500, instagram: 1200, tiktok: 600, pinterest: 500, linkedin: 1500, x: 280 };
+
+function maxLength(p, v) {
+  const hashtagChars = charLen(fullText(v)) - charLen(v.text);
+  return Math.min(COMFORT_MAX[p.id] || p.limit, p.limit - hashtagChars);
+}
+
+// Enough room left to add at least a short sentence.
+const canLengthen = (p, v) => maxLength(p, v) - charLen(v.text) >= (isDense(v.text) ? 10 : 30);
+
 // The platform guide without its word ranges ("40–90 words"). Sending the
 // range made the model grow an already-short text back to the minimum.
 const styleOnly = (guide) => guide.replace(/\s*\d+\s*[–-]\s*\d+\s*words\.?/gi, "").trim();
 
 const REWRITES = {
   shorter: "Make it shorter. Cut whole phrases rather than rewording. Keep the strongest idea and the call to action.",
+  longer: "Make it longer and richer. Add concrete detail from the product information above, a sensory moment or a use case. Keep the same voice, the same opening idea and the call to action. Never invent facts (prices, materials, sizes, awards, discounts) that are not in the product information.",
   warmer: "Make it warmer and more personal, as if the maker is talking. Keep about the same length.",
   cta: "Keep the idea but end with a clearer, more compelling call to action. Keep about the same length.",
 };
 
-function rewritePrompt(brand, p, lang, v, kind, maxChars) {
+function rewritePrompt(brand, p, brief, v, kind, maxChars) {
+  const cur = charLen(v.text);
+  const length = kind === "longer"
+    ? `The new text must be longer than the current ${cur} characters, ideally around ${maxChars} characters, and at most ${maxChars} characters long, hashtags not included. The current text is ${cur} characters.`
+    : `The new text must be at most ${maxChars} characters long, hashtags not included. The current text is ${cur} characters.`;
   return `${brandBlock(brand)}
+
+Product: ${brief.product}
+Product information: ${brief.details || "(none given beyond the current text)"}
 
 Platform: ${p.name}
 Style: ${styleOnly(p.guide)}
-Language: ${lang}
+Language: ${brief.language}
 
 Rewrite this ${p.name} text. ${REWRITES[kind]}
-The new text must be at most ${maxChars} characters long, hashtags not included. The current text is ${charLen(v.text)} characters.
+${length}
 Use at most ${v.hashtags.length} hashtags.
 Return exactly 1 variant.
 
@@ -539,6 +572,10 @@ async function rewrite(el, p, index, kind) {
     toast("This one is already as short as it gets.");
     return;
   }
+  if (kind === "longer" && !canLengthen(p, v)) {
+    toast(`This one is already as long as works well on ${p.name}.`);
+    return;
+  }
 
   el.classList.add("busy");
   el.querySelectorAll("button").forEach((b) => (b.disabled = true));
@@ -549,13 +586,25 @@ async function rewrite(el, p, index, kind) {
       // result: one stricter retry, and never accept a text that got longer.
       const target = Math.max(minLength(v.text), Math.round(cur * 0.65));
       for (const maxChars of [target, Math.max(minLength(v.text), Math.round(cur * 0.5))]) {
-        const [cand] = parseVariants(await ask(rewritePrompt(brand, p, r.brief.language, v, kind, maxChars), 700));
+        const [cand] = parseVariants(await ask(rewritePrompt(brand, p, r.brief, v, kind, maxChars), 700));
         if (charLen(cand.text) < cur) { next = cand; break; }
       }
       if (!next) throw new Error("couldn't make it any shorter without losing the message");
+    } else if (kind === "longer") {
+      // Mirror of Shorter: aim for about 1.4× the current length within the
+      // platform's comfortable maximum, then check the result. One stricter
+      // retry; never accept a text that got shorter or runs past the limit.
+      const max = maxLength(p, v);
+      const target = Math.min(max, Math.round(cur * 1.4) + 10);
+      for (const maxChars of [target, Math.min(max, Math.round(cur * 1.25) + 10)]) {
+        const [cand] = parseVariants(await ask(rewritePrompt(brand, p, r.brief, v, kind, maxChars), 900));
+        const len = charLen(cand.text);
+        if (len > cur && len <= max) { next = cand; break; }
+      }
+      if (!next) throw new Error("couldn't add more without padding or going past the limit");
     } else {
-      const maxChars = Math.min(p.limit, Math.round(cur * 1.15) + 20);
-      [next] = parseVariants(await ask(rewritePrompt(brand, p, r.brief.language, v, kind, maxChars), 700));
+      const maxChars = Math.min(maxLength(p, v), Math.round(cur * 1.15) + 20);
+      [next] = parseVariants(await ask(rewritePrompt(brand, p, r.brief, v, kind, maxChars), 700));
     }
 
     const hashtags = p.hashtags === 0 ? [] : (next.hashtags.length ? next.hashtags : v.hashtags).slice(0, Math.max(v.hashtags.length, 1));
@@ -567,8 +616,9 @@ async function rewrite(el, p, index, kind) {
   } catch (err) {
     el.classList.remove("busy");
     el.querySelectorAll("button").forEach((b) => (b.disabled = false));
-    if (kind === "shorter" && !canShorten(v)) el.querySelector(".mini.shorten")?.setAttribute("disabled", "");
-    toast(`${kind === "shorter" ? "Shorter" : "Rewrite"} failed: ${friendlyError(err)}`);
+    applyLengthLimits(el, p, v);
+    const label = { shorter: "Shorter", longer: "Longer" }[kind] || "Rewrite";
+    toast(`${label} failed: ${friendlyError(err)}`);
   }
 }
 
