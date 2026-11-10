@@ -416,6 +416,8 @@ dialog {
   color: var(--ink);
   width: min(460px, calc(100vw - 32px));
   padding: 22px;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
 }
 dialog::backdrop { background: rgba(17, 24, 39, 0.45); }
 dialog h2 { margin: 0 0 4px; font-size: 18px; }

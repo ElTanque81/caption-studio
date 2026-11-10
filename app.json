@@ -1,7 +1,7 @@
 {
   "slug": "caption-studio",
   "name": "Caption Studio",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "tagline": "Product descriptions, captions and hashtags in your brand's voice.",
   "description": "Caption Studio writes sales copy for small shops and creators. Save your brand voice once, snap or describe a product, pick the platforms, and get several ready-to-post variants with hashtags.\n\n**What it does**\n\n- Start from a photo: drop in a product photo and the AI fills in the product name and the details it can see. It never guesses sizes, prices or materials.\n- Brand profiles: voice, audience, words to avoid, emoji style — saved and reused for every text.\n- Platforms: shop product description, Instagram, TikTok, Pinterest, LinkedIn and X, each written to its own length and style.\n- Every variant shows its length against the platform limit, with one-click copy.\n- Share in one click: pre-filled posts for X and LinkedIn; copy-and-open for Instagram, TikTok and Pinterest.\n- Quick rewrites per variant: shorter, longer, warmer, or a stronger call to action. Shorter and Longer always move in the right direction and stop at sensible limits for each platform.\n- App in English, German, Chinese, Russian and Hindi; copy in 14 languages; a history of your last results.\n\n**Who it's for**\n\nEtsy, Shopify and marketplace sellers, social media managers and freelancers who write product copy every day.",
   "category": "productivity",
