@@ -8,45 +8,73 @@
   </head>
   <body>
     <div class="app">
-      <aside class="desk" aria-label="What to write">
+      <aside class="desk" data-i18n-aria="region.brief" aria-label="What to write">
         <header class="masthead">
           <svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><rect x="0.5" y="0.5" width="63" height="63" rx="14" fill="#fffdf8" stroke="#c8d1dc"/><path d="M22 9h20l9 9v37H13V18z" fill="#18233d"/><circle cx="32" cy="17" r="3.4" fill="#fffdf8"/><g stroke-width="5" stroke-linecap="round"><path d="M20 30h9" stroke="#e7b2c3"/><path d="M35 30h9" stroke="#94d3cc"/><path d="M20 39h5" stroke="#d6b487"/><path d="M31 39h13" stroke="#a7c1e6"/><path d="M20 48h12" stroke="#e6a596"/></g></svg>
           <h1>Caption Studio</h1>
-          <button type="button" id="theme" class="theme-btn" aria-label="Theme: automatic. Click to change."></button>
-          <span id="conn" class="conn" title="Connection to Anna"></span>
+          <div class="masthead-tools">
+            <label class="lang-pick">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M1.8 8h12.4M8 1.8c1.8 1.8 2.6 3.8 2.6 6.2S9.8 12.4 8 14.2C6.2 12.4 5.4 10.4 5.4 8S6.2 3.6 8 1.8z" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+              <span class="sr-only" data-i18n="uiLang.label">App language</span>
+              <select id="ui-lang"></select>
+            </label>
+            <button type="button" id="theme" class="theme-btn" aria-label="Theme: automatic. Click to change."></button>
+            <span id="conn" class="conn" title="Connection to Anna"></span>
+          </div>
         </header>
 
         <form id="brief" autocomplete="off">
           <div class="field">
             <div class="row-between">
-              <label for="brand">Brand voice</label>
-              <button type="button" class="link" id="edit-brand">Edit</button>
+              <label for="brand" data-i18n="brand.label">Brand voice</label>
+              <button type="button" class="link" id="edit-brand" data-i18n="brand.edit">Edit</button>
             </div>
             <select id="brand"></select>
           </div>
 
-          <div class="field">
-            <label for="product">Product</label>
-            <input id="product" required placeholder="Hand-thrown ceramic mug" maxlength="120" />
+          <div class="photo" id="photo">
+            <input type="file" id="photo-input" accept="image/*" hidden />
+            <button type="button" class="photo-drop" id="photo-drop">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l1.6-2.4h6.8L17 8h3v11H4z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="13.2" r="3.4" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
+              <span>
+                <strong data-i18n="photo.title">Start from a photo</strong>
+                <small data-i18n="photo.hint">Drop a product photo here or choose one. The AI fills in the product and details.</small>
+              </span>
+            </button>
+            <div class="photo-preview" id="photo-preview" hidden>
+              <img id="photo-img" alt="" data-i18n-alt="photo.alt" />
+              <div class="photo-side">
+                <p id="photo-status" class="photo-status" role="status" aria-live="polite"></p>
+                <div class="photo-actions">
+                  <button type="button" class="link" id="photo-undo" data-i18n="photo.undo" hidden>Undo</button>
+                  <button type="button" class="link" id="photo-remove" data-i18n="photo.remove">Remove photo</button>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div class="field">
-            <label for="details">What makes it worth buying?</label>
-            <textarea id="details" rows="4" maxlength="1500" placeholder="350 ml, matte sand glaze, dishwasher safe, each one unique, made in Lisbon"></textarea>
+            <label for="product" data-i18n="product.label">Product</label>
+            <input id="product" required data-i18n-ph="product.ph" placeholder="Hand-thrown ceramic mug" maxlength="120" />
+          </div>
+
+          <div class="field">
+            <label for="details" data-i18n="details.label">What makes it worth buying?</label>
+            <textarea id="details" rows="4" maxlength="1500" data-i18n-ph="details.ph" placeholder="350 ml, matte sand glaze, dishwasher safe, each one unique, made in Lisbon"></textarea>
           </div>
 
           <fieldset class="field">
-            <legend>Where it will be posted</legend>
+            <legend data-i18n="platforms.legend">Where it will be posted</legend>
             <div id="platforms" class="chips"></div>
           </fieldset>
 
           <div class="two">
             <div class="field">
-              <label for="language">Language</label>
+              <label for="language" data-i18n="language.label">Language of the copy</label>
               <select id="language"></select>
             </div>
             <div class="field">
-              <label for="count">Variants</label>
+              <label for="count" data-i18n="count.label">Variants</label>
               <select id="count">
                 <option>2</option>
                 <option selected>3</option>
@@ -57,25 +85,25 @@
           </div>
 
           <div class="field">
-            <label for="cta">Call to action <span class="opt">(optional)</span></label>
-            <input id="cta" maxlength="120" placeholder="Link in bio · 10% off with code KILN10" />
+            <label for="cta"><span data-i18n="cta.label">Call to action</span> <span class="opt" data-i18n="cta.optional">(optional)</span></label>
+            <input id="cta" maxlength="120" data-i18n-ph="cta.ph" placeholder="Link in bio · 10% off with code KILN10" />
           </div>
 
-          <button type="submit" class="primary" id="go">Write copy</button>
+          <button type="submit" class="primary" id="go" data-i18n="go">Write copy</button>
           <p id="status" class="status" role="status" aria-live="polite"></p>
         </form>
       </aside>
 
-      <main class="rack" aria-label="Results">
-        <nav class="tabs" id="tabs" aria-label="Platforms"></nav>
+      <main class="rack" data-i18n-aria="region.results" aria-label="Results">
+        <nav class="tabs" id="tabs" data-i18n-aria="region.platforms" aria-label="Platforms"></nav>
         <div id="results" class="results">
           <div class="empty">
-            <p class="empty-title">Your tags will hang here.</p>
-            <p>Describe a product on the left and choose where it will be posted. Each variant comes with hashtags and a length check for that platform.</p>
+            <p class="empty-title" data-i18n="empty.title">Your tags will hang here.</p>
+            <p data-i18n="empty.body">Describe a product on the left and choose where it will be posted. Each variant comes with hashtags and a length check for that platform.</p>
           </div>
         </div>
-        <section class="history" aria-label="Recent">
-          <h2>Recent</h2>
+        <section class="history" data-i18n-aria="history.title" aria-label="Recent">
+          <h2 data-i18n="history.title">Recent</h2>
           <ul id="history"></ul>
         </section>
       </main>
@@ -83,26 +111,26 @@
 
     <dialog id="brand-dialog">
       <form method="dialog" id="brand-form">
-        <h2>Brand voice</h2>
-        <p class="hint">Saved to your account and used for every text you write.</p>
-        <div class="field"><label for="b-name">Brand name</label><input id="b-name" required maxlength="60" /></div>
-        <div class="field"><label for="b-voice">How it sounds</label><input id="b-voice" maxlength="160" placeholder="Warm, calm, a little witty" /></div>
-        <div class="field"><label for="b-audience">Who buys</label><input id="b-audience" maxlength="160" placeholder="Coffee lovers, 25–45, care about handmade" /></div>
-        <div class="field"><label for="b-avoid">Never say</label><input id="b-avoid" maxlength="200" placeholder="cheap, best ever, game-changer" /></div>
+        <h2 data-i18n="dialog.title">Brand voice</h2>
+        <p class="hint" data-i18n="dialog.hint">Saved to your account and used for every text you write.</p>
+        <div class="field"><label for="b-name" data-i18n="b.name">Brand name</label><input id="b-name" required maxlength="60" /></div>
+        <div class="field"><label for="b-voice" data-i18n="b.voice">How it sounds</label><input id="b-voice" maxlength="160" data-i18n-ph="b.voicePh" placeholder="Warm, calm, a little witty" /></div>
+        <div class="field"><label for="b-audience" data-i18n="b.audience">Who buys</label><input id="b-audience" maxlength="160" data-i18n-ph="b.audiencePh" placeholder="Coffee lovers, 25–45, care about handmade" /></div>
+        <div class="field"><label for="b-avoid" data-i18n="b.avoid">Never say</label><input id="b-avoid" maxlength="200" data-i18n-ph="b.avoidPh" placeholder="cheap, best ever, game-changer" /></div>
         <div class="field">
-          <label for="b-emoji">Emoji</label>
+          <label for="b-emoji" data-i18n="b.emoji">Emoji</label>
           <select id="b-emoji">
-            <option value="none">None</option>
-            <option value="few" selected>A few</option>
-            <option value="many">Plenty</option>
+            <option value="none" data-i18n="emoji.none">None</option>
+            <option value="few" selected data-i18n="emoji.few">A few</option>
+            <option value="many" data-i18n="emoji.many">Plenty</option>
           </select>
         </div>
         <div class="dialog-actions">
-          <button type="button" class="link danger" id="b-delete">Delete</button>
+          <button type="button" class="link danger" id="b-delete" data-i18n="b.delete">Delete</button>
           <span class="spacer"></span>
-          <button type="button" class="ghost" id="b-cancel">Cancel</button>
-          <button type="button" class="ghost" id="b-new">Save as new</button>
-          <button type="submit" class="primary small" id="b-save">Save</button>
+          <button type="button" class="ghost" id="b-cancel" data-i18n="b.cancel">Cancel</button>
+          <button type="button" class="ghost" id="b-new" data-i18n="b.saveNew">Save as new</button>
+          <button type="submit" class="primary small" id="b-save" data-i18n="b.save">Save</button>
         </div>
       </form>
     </dialog>
