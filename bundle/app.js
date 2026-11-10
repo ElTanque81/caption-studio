@@ -603,7 +603,8 @@ async function generate(e) {
 }
 
 function friendlyError(err) {
-  const name = err?.name || err?.code || "";
+  // Host errors carry a code (QUOTA_EXCEEDED…); a plain Error's name is just "Error".
+  const name = `${err?.code || ""} ${err?.name || ""}`;
   if (/QUOTA|RATE/i.test(name)) return t("err.quota");
   if (/PERMISSION|DENIED|ACL/i.test(name)) return t("err.permission");
   if (err instanceof SyntaxError) return t("err.cutoff");
