@@ -2,31 +2,37 @@
 
 # Caption Studio
 
-An Anna App that writes product descriptions, social media captions and hashtags in your brand's voice.
+An Anna App that turns a seller's real selling points into conversion copy for their shop and social media, and checks every draft so it doesn't read like generic filler.
 
 Built for the [Anna AI App Builder Program](https://dorahacks.io/hackathon/2349/detail) on DoraHacks.
 
-![Caption Studio](docs/screenshots/1-captions.png)
+![Caption Studio](docs/screenshots/1-angles-and-copy.png)
 
-## What it does
+## The problem
 
-Small sellers write the same kind of copy every day: a shop listing, then an Instagram caption, then a TikTok caption, then a pin. Caption Studio turns one product brief into all of them.
+A one-line prompt like "write an Instagram caption for my ceramic mug" gives the same copy every shop gets: "Elevate your mornings with our handcrafted mug." It says nothing about why this mug is worth buying. Good copy is built on specifics the seller knows and the model doesn't: who buys it, what annoys them about the alternatives, what is really different, and what proof exists.
 
-- **Start from a photo.** Drop, paste or pick a product photo. It is resized in the browser and sent to the host's vision model with `anna.llm.complete` (text + image block); the model fills in the product name and the details it can see, and is told never to guess sizes, prices, brands or materials. One click undoes it. A model without image support gets a clear message.
-- **Brand voices.** Save how your brand sounds, who buys, words to avoid and emoji style. Every text uses it. Switch between several brands.
-- **Six platforms.** Shop listing, Instagram, TikTok, Pinterest, LinkedIn and X, each with its own length, structure and hashtag count.
-- **Several angles per platform.** Benefit, story, feeling, practical detail.
-- **Length check.** Each variant shows its length against the platform limit and turns red when it is too long.
-- **Share in one click.** "Post on X" and "Post on LinkedIn" open a pre-filled post. For Instagram, TikTok and Pinterest the text is copied and the site opens, ready to paste next to your photo or video. "Copy all platforms" copies everything at once.
-- **One-click rewrites.** Shorter, longer, warmer, or a stronger call to action, per variant. "Shorter" and "Longer" always move in the right direction: the result is checked in code, retried once if needed, and never accepted if it went the wrong way or past the platform limit. "Longer" only adds detail from the product information the user gave. Each button switches off at a sensible minimum or maximum for the platform.
-- **Five interface languages.** English, German, Chinese, Russian and Hindi, picked from the browser language and switchable in the header; the choice is saved per user.
-- **14 copy languages.** The copy language follows the interface language unless the user picks another one.
-- **History.** The last 12 results are saved and can be reopened.
-- **No invented facts.** The prompt forbids inventing prices, materials, awards or discounts the user did not give.
+## How Caption Studio works
+
+1. **Product.** Type it in or start from a photo; the vision model fills in what it can see.
+2. **Selling points.** Structured fields for the buyer and moment, the problem it fixes, what makes it different, proof, and the main doubt with the seller's answer. "Help me find selling points" asks 3–4 questions specific to the product to draw these out. A brief-strength meter shows what to add next.
+3. **Angles.** The model first proposes 2–4 clearly different angles, each with a buyer, a promise and a hook, built only on the brief.
+4. **Copy.** For each platform it writes one variant per angle and reports which selling points each text uses, quoting the phrase that carries it.
+5. **Quality check, in code.** Every variant is checked for clichés, for numbers that are not in the brief (invented review counts, prices, percentages) and for ignoring the selling points. Failing drafts are redrafted once with specific feedback. The selling points a variant really uses are shown as chips; a number that still isn't in the brief is flagged on the variant.
+
+## Features
+
+- **Six platforms.** Shop listing, Instagram, TikTok, Pinterest, LinkedIn and X, each with its own format, hashtag count and live length check.
+- **Brand voices.** Tone, audience, words to avoid and emoji style, saved per user.
+- **One-click rewrites.** Shorter, longer, warmer or a stronger call to action. Shorter and Longer are verified in code to move in the right direction and stop at sensible limits.
+- **Share.** Pre-filled posts for X and LinkedIn; copy-and-open for Instagram, TikTok and Pinterest; "Copy all platforms".
+- **Start from a photo.** Resized in the browser and read with the host's vision model.
+- **Five interface languages** (English, German, Chinese, Russian, Hindi) and **14 copy languages**.
+- **History, light and dark mode.**
 
 ## How AI is used
 
-The app calls the host LLM with `anna.llm.complete`. Each platform gets its own request with a platform-specific format guide and the brand voice, and the model answers in strict JSON (`{"variants":[{"text","hashtags"}]}`) that the UI renders and validates. Rewrites send the chosen variant back with a single instruction. Brand voices, the last brief and history are stored per user with `anna.storage`.
+All calls go through `anna.llm.complete`: one call for the angles, one per platform for the copy (two in parallel), one optional call for the selling-point questions, one for a photo, and one per rewrite. Model output is strict JSON and is validated before it is shown. Brand voices, the last brief and the history are stored per user with `anna.storage`.
 
 ## Project layout
 
@@ -41,7 +47,7 @@ The app calls the host LLM with `anna.llm.complete`. Each platform gets its own 
 | `bundle/icon.svg`, `logo.svg` | Window icon and store logo (source) |
 | `docs/logo-256.png`, `logo-512.png`, `logo-1024.png` | Store logo as PNG (`logo_file` in app.json) |
 | `docs/screenshots/` | Store screenshots (`screenshots` in app.json, uploaded by `anna-app publish`) |
-| `fixtures/happy-path.jsonl` | Canned LLM answer for offline testing |
+| `fixtures/happy-path.jsonl` | One canned answer that serves every step, for offline testing |
 
 No backend and no Executa: everything runs in the Anna iframe.
 

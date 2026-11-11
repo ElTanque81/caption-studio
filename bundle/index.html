@@ -32,6 +32,7 @@
             <select id="brand"></select>
           </div>
 
+          <h2 class="step"><span class="step-n">1</span><span data-i18n="step.product">Product</span></h2>
           <div class="photo" id="photo">
             <input type="file" id="photo-input" accept="image/*" hidden />
             <button type="button" class="photo-drop" id="photo-drop">
@@ -59,9 +60,53 @@
           </div>
 
           <div class="field">
-            <label for="details" data-i18n="details.label">What makes it worth buying?</label>
-            <textarea id="details" rows="4" maxlength="1500" data-i18n-ph="details.ph" placeholder="350 ml, matte sand glaze, dishwasher safe, each one unique, made in Lisbon"></textarea>
+            <label for="details" data-i18n="details.label">Product facts</label>
+            <textarea id="details" rows="3" maxlength="1500" data-i18n-ph="details.ph"></textarea>
           </div>
+
+          <h2 class="step"><span class="step-n">2</span><span data-i18n="step.points">Selling points</span></h2>
+          <p class="step-hint" data-i18n="step.pointsHint">The more specific these are, the less generic the copy.</p>
+
+          <div class="interview" id="interview">
+            <button type="button" class="ghost interview-btn" id="interview-btn" data-i18n="interview.button">Help me find selling points</button>
+            <div class="interview-panel" id="interview-panel" hidden>
+              <p class="interview-intro" data-i18n="interview.intro">Answer what you can. Short answers are fine.</p>
+              <div id="interview-questions"></div>
+              <div class="interview-actions">
+                <button type="button" class="link" id="interview-close" data-i18n="interview.close">Close</button>
+                <button type="button" class="primary small" id="interview-add" data-i18n="interview.add">Add to brief</button>
+              </div>
+            </div>
+            <p class="interview-status" id="interview-status" role="status" aria-live="polite"></p>
+          </div>
+
+          <div class="field point">
+            <label for="persona" data-i18n="persona.label">Who buys it, and when?</label>
+            <textarea id="persona" rows="2" maxlength="400" data-i18n-ph="persona.ph"></textarea>
+          </div>
+          <div class="field point">
+            <label for="pain" data-i18n="pain.label">What problem or frustration does it fix?</label>
+            <textarea id="pain" rows="2" maxlength="400" data-i18n-ph="pain.ph"></textarea>
+          </div>
+          <div class="field point">
+            <label for="unique" data-i18n="unique.label">What makes yours different?</label>
+            <textarea id="unique" rows="2" maxlength="500" data-i18n-ph="unique.ph"></textarea>
+          </div>
+          <div class="field point">
+            <label for="proof"><span data-i18n="proof.label">Proof you can show</span> <span class="opt" data-i18n="cta.optional">(optional)</span></label>
+            <textarea id="proof" rows="2" maxlength="400" data-i18n-ph="proof.ph"></textarea>
+          </div>
+          <div class="field point">
+            <label for="objection"><span data-i18n="objection.label">Biggest doubt, and your answer</span> <span class="opt" data-i18n="cta.optional">(optional)</span></label>
+            <textarea id="objection" rows="2" maxlength="400" data-i18n-ph="objection.ph"></textarea>
+          </div>
+
+          <div class="strength" id="strength" aria-live="polite">
+            <div class="strength-bar" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+            <p class="strength-text"><strong id="strength-label"></strong> <span id="strength-tip"></span></p>
+          </div>
+
+          <h2 class="step"><span class="step-n">3</span><span data-i18n="step.where">Where it goes</span></h2>
 
           <fieldset class="field">
             <legend data-i18n="platforms.legend">Where it will be posted</legend>
@@ -74,12 +119,11 @@
               <select id="language"></select>
             </div>
             <div class="field">
-              <label for="count" data-i18n="count.label">Variants</label>
+              <label for="count" data-i18n="count.label">Angles</label>
               <select id="count">
                 <option>2</option>
                 <option selected>3</option>
                 <option>4</option>
-                <option>5</option>
               </select>
             </div>
           </div>
@@ -95,6 +139,10 @@
       </aside>
 
       <main class="rack" data-i18n-aria="region.results" aria-label="Results">
+        <section class="angles" id="angles" hidden data-i18n-aria="angles.title" aria-label="Your angles">
+          <h2 data-i18n="angles.title">Your angles</h2>
+          <div class="angle-list" id="angle-list"></div>
+        </section>
         <nav class="tabs" id="tabs" data-i18n-aria="region.platforms" aria-label="Platforms"></nav>
         <div id="results" class="results">
           <div class="empty">

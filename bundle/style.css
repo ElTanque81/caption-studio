@@ -454,3 +454,68 @@ dialog h2 { margin: 0 0 4px; font-size: 18px; }
   .toast { transition: none; }
 }
 .tag:not(.busy) .mini:disabled { cursor: not-allowed; opacity: 0.45; }
+
+/* ---------- 0.3: steps, selling points, strength, angles ---------- */
+
+.step {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 15px; font-weight: 700; margin: 22px 0 10px;
+}
+.step:first-of-type { margin-top: 4px; }
+.step-n {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--ink); color: var(--desk); font-size: 12px;
+}
+.step-hint { margin: -4px 0 12px; font-size: 13px; color: var(--ink-2); }
+
+.point textarea { min-height: 0; }
+
+.interview { margin: 0 0 14px; }
+.interview-btn { width: 100%; font-weight: 600; }
+.interview-btn:disabled { opacity: 0.6; cursor: progress; }
+.interview-panel {
+  margin-top: 10px; padding: 12px 12px 10px;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--tag);
+}
+.interview-intro { margin: 0 0 10px; font-size: 13px; color: var(--ink-2); }
+.interview-panel label { color: var(--ink); font-weight: 600; }
+.interview-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.interview-status { margin: 6px 0 0; font-size: 13px; color: var(--ink-2); min-height: 0; }
+.interview-status:empty { display: none; }
+
+.strength { margin: 2px 0 6px; }
+.strength-bar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-bottom: 6px; }
+.strength-bar span { height: 5px; border-radius: 3px; background: var(--line); }
+.strength-bar span.on { background: var(--ink-2); }
+.strength[data-level="2"] .strength-bar span.on { background: #3a9b5c; }
+.strength-text { margin: 0; font-size: 13px; color: var(--ink-2); line-height: 1.45; }
+.strength-text strong { color: var(--ink); }
+
+.angles { margin-bottom: 18px; }
+.angles h2 { font-size: 14px; margin: 0 0 8px; color: var(--ink-2); }
+.angle-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.angle {
+  background: var(--desk); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 10px 12px;
+}
+.angle h3 { margin: 0 0 2px; font-size: 14.5px; }
+.angle-who { margin: 0 0 4px; font-size: 12.5px; color: var(--ink-2); }
+.angle-promise { margin: 0; font-size: 13.5px; line-height: 1.4; }
+
+.tag-angle {
+  margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.01em;
+  color: var(--ink-2);
+}
+.uses { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: -4px 0 12px; }
+.uses-label { font-size: 12px; color: var(--ink-2); }
+.use {
+  font-size: 12px; padding: 1px 8px; border-radius: 999px;
+  background: var(--paper); color: var(--ink);
+}
+.use.warn { background: transparent; color: var(--danger); padding-left: 0; }
+
+/* Wider windows: the form and the results scroll on their own. */
+@media (min-width: 721px) {
+  .app { height: 100vh; }
+}

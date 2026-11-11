@@ -164,6 +164,7 @@ function renderUi() {
   renderBrands();
   renderStatus();
   renderPhotoStatus();
+  renderStrength();
   renderResults();
   renderHistory();
 }
@@ -181,27 +182,143 @@ function brandBlock(b) {
   ].filter(Boolean).join("\n");
 }
 
-const SYSTEM = `You are a senior e-commerce and social media copywriter.
-You write copy that sounds human, specific and true to the product. You never invent facts (prices, materials, awards, discounts) that the user did not give you.
-Respond with JSON only, no markdown fences, in exactly this shape:
-{"variants":[{"text":"...","hashtags":["word","word"]}]}
-Hashtags are lowercase, without the # sign, no spaces. Each variant must take a clearly different angle (e.g. benefit, story, feeling, practical detail).`;
+/* The selling points. `facts` lives in the #details field. */
+const POINTS = ["facts", "persona", "pain", "unique", "proof", "objection"];
+const pointField = (k) => (k === "facts" ? "details" : k);
 
-function buildPrompt(brief, platform, brand) {
+// Phrases that make copy sound like every other shop. Checked in code, and
+// named in the prompt so the model avoids them in the first place.
+const CLICHES = [
+  "elevate", "game-changer", "game changer", "look no further", "whether you're", "introducing", "must-have",
+  "unleash", "level up", "to the next level", "say goodbye to", "say hello to", "ultimate", "revolutionary",
+  "seamless", "effortless", "in today's", "you deserve", "treat yourself", "the perfect gift", "dive into",
+  "discover the", "experience the", "made with love", "crafted with love", "don't miss out", "high-quality",
+  "premium quality", "best-in-class", "transform your", "next level", "redefine", "indulge in",
+  "auf das nächste level", "ein muss", "gönn dir", "ultimativ", "revolutionär", "perfekt für jeden",
+  "entdecke die", "mit liebe gemacht", "hochwertig", "verpasse nicht",
+];
+
+const SYSTEM = `You are a direct-response copywriter for small makers and online sellers. You write like a real person who knows the product well, not like an ad.
+Rules:
+- Build every text on the seller's selling points: who buys it, their problem, what is different, the proof. Reuse the seller's own concrete words and details.
+- Open with something specific: a detail, a moment, a problem. Never open with a generic line, a slogan or a question about the reader's life.
+- No hype words without a fact behind them. Never use: ${CLICHES.slice(0, 33).join(", ")}.
+- Never invent facts: no numbers, ratings, reviews, awards, materials, origins, guarantees, prices or discounts that are not in the brief.
+- Vary sentence length. At most one question and at most one exclamation mark per text.
+Respond with JSON only, no markdown fences.`;
+
+function briefBlock(b) {
+  const v = (x) => x || "(not given)";
+  return `Product: ${b.product}
+Product facts: ${v(b.details)}
+Buyer, and when they buy: ${v(b.persona)}
+Problem or frustration it fixes: ${v(b.pain)}
+What is different about it: ${v(b.unique)}
+Proof (real, may be used): ${v(b.proof)}
+Main doubt, and the seller's answer: ${v(b.objection)}
+Call to action: ${b.cta || "(choose a natural one for the platform, without inventing offers)"}`;
+}
+
+function strategyPrompt(b, brand) {
+  return `Find the ${b.count} strongest, clearly different angles for selling this product.
+
+${brandBlock(brand)}
+
+${briefBlock(b)}
+
+An angle is one reason to buy, aimed at one buyer in one situation. Base every angle on the selling points above and invent nothing. Make the angles really different, for example: the problem it fixes, the craft behind it, the moment it is used, the person it is a gift for, the doubt it answers.
+For each angle give: name (2 to 4 words), buyer (who, in a short phrase), promise (what they get, one sentence), hook (a specific opening idea, not a slogan), points (the selling points it rests on, from: ${POINTS.join(", ")}).
+Write in ${b.language}.
+
+Return exactly: {"angles":[{"id":"a1","name":"...","buyer":"...","promise":"...","hook":"...","points":["pain","unique"]}]}`;
+}
+
+function buildPrompt(brief, platform, brand, angles, feedback) {
   return `${brandBlock(brand)}
+
+${briefBlock(brief)}
 
 Platform: ${platform.name}
 Format: ${platform.guide}
 Hard limit: ${platform.limit} characters per text.
-Hashtags per variant: ${platform.hashtags === 0 ? "none (empty array)" : `${Math.max(2, platform.hashtags - 3)}–${platform.hashtags}`}
+Hashtags per variant: ${platform.hashtags === 0 ? "none (empty array)" : `${Math.max(2, platform.hashtags - 3)}–${platform.hashtags}`}, specific to this product and buyer, not generic.
 Language: write everything in ${brief.language}.
 
-Product: ${brief.product}
-Details: ${brief.details || "(none given — stay general and do not invent specifics)"}
-Call to action: ${brief.cta || "(choose a natural one for the platform, without inventing offers)"}
+Write exactly ${angles.length} variants, one per angle, in this order:
+${angles.map((a) => `- ${a.id}: ${a.name}. For ${a.buyer}. Promise: ${a.promise}. Hook idea: ${a.hook}`).join("\n")}
 
-Write ${brief.count} variants.`;
+For each variant also list "uses": the selling points the text really uses, each with its field (${POINTS.join(", ")}) and the exact short phrase from YOUR text that carries it.${feedback ? `\n\nYour previous draft had problems. Fix them:\n${feedback}` : ""}
+
+Return exactly: {"variants":[{"angle":"a1","text":"...","hashtags":["word"],"uses":[{"field":"pain","phrase":"..."}]}]}`;
 }
+
+function interviewPrompt(b) {
+  return `A small seller wants copy for this product. Help them find the selling points that make it worth buying.
+
+${briefBlock(b)}
+
+Ask 3 or 4 short, specific questions about THIS product that the seller can answer from their own knowledge. Each question aims at one field: persona (who buys it and when), pain (the problem or frustration it fixes), unique (what is different: material, craft, process, origin), proof (reviews, numbers or guarantees they really have), objection (the main doubt and their answer). Skip fields the brief already answers well. Give each question a short example answer that shows the kind of detail you want; it is only an example, never a fact about their product.
+Write in ${COPY_LANG_FOR_UI[uiLang()]}.
+
+Return exactly: {"questions":[{"field":"pain","question":"...","example":"..."}]}`;
+}
+
+/* ------------------------------------------------------- quality checks */
+
+const norm = (s) => String(s).toLowerCase().replace(/\s+/g, " ").trim();
+
+function clichesIn(text) {
+  const t0 = norm(text);
+  return CLICHES.filter((c) => {
+    if (/^[a-z]+$/.test(c)) return new RegExp(`\\b${c}\\b`, "i").test(t0);
+    return t0.includes(c);
+  });
+}
+
+const numTokens = (s) => (String(s).match(/\d+(?:[.,]\d+)*/g) || []);
+const digitsOnly = (n) => n.replace(/[.,]/g, "");
+
+// Numbers in the copy that the seller never gave (prices, ratings, counts…).
+function inventedNumbers(text, brief) {
+  const source = [brief.product, brief.details, brief.persona, brief.pain, brief.unique, brief.proof, brief.objection, brief.cta].join(" ");
+  const allowed = new Set(numTokens(source).flatMap((n) => [n.replace(",", "."), digitsOnly(n)]));
+  return [...new Set(numTokens(text))].filter((n) => n !== "1" && !allowed.has(n.replace(",", ".")) && !allowed.has(digitsOnly(n)));
+}
+
+const filledPoints = (b) => POINTS.filter((k) => (b[pointField(k)] || "").trim());
+
+// Keep only the "uses" the text really contains, for fields the seller filled.
+function verifiedUses(v, brief) {
+  const filled = new Set(filledPoints(brief));
+  const text = norm(v.text);
+  const fields = [];
+  for (const u of v.uses || []) {
+    const phrase = norm(u?.phrase || "");
+    if (phrase.length >= 3 && POINTS.includes(u.field) && filled.has(u.field) && text.includes(phrase) && !fields.includes(u.field)) fields.push(u.field);
+  }
+  return fields;
+}
+
+function checkVariant(v, brief) {
+  const cliches = clichesIn(v.text);
+  const invented = inventedNumbers(v.text, brief);
+  const uses = verifiedUses(v, brief);
+  const weak = filledPoints(brief).length >= 2 && uses.length < 2;
+  return { cliches, invented, uses, weak, score: cliches.length * 2 + invented.length * 3 + (weak ? 2 : 0) };
+}
+
+function feedbackFor(variants, checks) {
+  return variants.map((v, i) => {
+    const c = checks[i];
+    const parts = [];
+    if (c.cliches.length) parts.push(`remove the clichés ${c.cliches.map((x) => `"${x}"`).join(", ")} and say something concrete instead`);
+    if (c.invented.length) parts.push(`remove these numbers, they are not in the brief: ${c.invented.join(", ")}`);
+    if (c.weak) parts.push("build it on at least two of the seller's selling points, using their concrete details");
+    return parts.length ? `- ${v.angle || `variant ${i + 1}`}: ${parts.join("; ")}.` : "";
+  }).filter(Boolean).join("\n");
+}
+
+const sumScore = (checks) => checks.reduce((s, c) => s + c.score, 0);
 
 function extractJson(raw) {
   const text = typeof raw === "string" ? raw : "";
@@ -217,14 +334,42 @@ function parseVariants(raw) {
   const list = Array.isArray(data.variants) ? data.variants : [];
   const clean = list
     .map((v) => ({
+      angle: typeof v.angle === "string" ? v.angle : undefined,
       text: String(v.text || "").trim(),
       hashtags: (Array.isArray(v.hashtags) ? v.hashtags : [])
         .map((h) => String(h).replace(/^#+/, "").replace(/\s+/g, "").trim())
         .filter(Boolean),
+      uses: Array.isArray(v.uses) ? v.uses.filter((u) => u && typeof u === "object") : [],
     }))
     .filter((v) => v.text);
   if (!clean.length) throw new Error(t("err.empty"));
   return clean;
+}
+
+function parseAngles(raw, count) {
+  const data = extractJson(raw);
+  const list = (Array.isArray(data?.angles) ? data.angles : [])
+    .map((a, i) => ({
+      id: `a${i + 1}`,
+      name: String(a.name || "").trim(),
+      buyer: String(a.buyer || "").trim(),
+      promise: String(a.promise || "").trim(),
+      hook: String(a.hook || "").trim(),
+      points: (Array.isArray(a.points) ? a.points : []).filter((p) => POINTS.includes(p)),
+    }))
+    .filter((a) => a.name && a.promise)
+    .slice(0, count);
+  if (!list.length) throw new Error(t("err.empty"));
+  return list;
+}
+
+function parseQuestions(raw) {
+  const data = extractJson(raw);
+  const asks = ["persona", "pain", "unique", "proof", "objection"];
+  return (Array.isArray(data?.questions) ? data.questions : [])
+    .map((q) => ({ field: asks.includes(q.field) ? q.field : "unique", question: String(q.question || "").trim(), example: String(q.example || "").trim() }))
+    .filter((q) => q.question)
+    .slice(0, 4);
 }
 
 function completionText(res) {
@@ -234,29 +379,47 @@ function completionText(res) {
   return c.text || "";
 }
 
-async function ask(userPrompt, maxTokens = 1400) {
+async function ask(userPrompt, maxTokens = 1400, temperature = 0.8) {
   if (!state.anna) return demoAnswer(userPrompt);
   const res = await state.anna.llm.complete({
     systemPrompt: SYSTEM,
     messages: [{ role: "user", content: { type: "text", text: userPrompt } }],
     maxTokens,
-    temperature: 0.8,
+    temperature,
   });
   return completionText(res);
 }
 
 /* Canned output so the UI can be previewed in a normal browser. */
 function demoAnswer(prompt) {
-  const product = (prompt.match(/Product: (.*)/) || [])[1] || "your product";
-  const one = /Write 1 variants/.test(prompt) || /Rewrite/.test(prompt);
-  const base = [
-    { text: `Meet ${product}. Made with care, built for every day — the kind of thing you reach for first.\n\nTap the link to see it up close.`, hashtags: ["handmade", "shopsmall", "madewithlove", "giftideas"] },
-    { text: `Small details, big difference. ${product} is the upgrade your routine has been waiting for. ✨`, hashtags: ["everydayessentials", "smallbusiness", "newin"] },
-    { text: `POV: you finally found ${product} that feels like it was made for you. Comment "LINK" and we'll send it over.`, hashtags: ["tiktokmademebuyit", "shoplocal"] },
-    { text: `Why we made ${product}: because good things should last. Simple materials, honest work, ready to ship.`, hashtags: ["slowliving", "qualityoverquantity"] },
-    { text: `${product} — designed to be used, loved and used again.`, hashtags: ["design", "makers"] },
-  ];
-  return new Promise((r) => setTimeout(() => r(JSON.stringify({ variants: one ? [base[1]] : base })), 700));
+  const field = (label) => ((prompt.match(new RegExp(`\\n?${label}: (.*)`)) || [])[1] || "").replace("(not given)", "").trim();
+  const product = field("Product") || "your product";
+  const pain = field("Problem or frustration it fixes");
+  const unique = field("What is different about it");
+  let out;
+  if (/strongest, clearly different angles/.test(prompt)) {
+    out = { angles: [
+      { name: "The problem, solved", buyer: field("Buyer, and when they buy") || "people who need it", promise: pain ? `No more: ${pain}.` : `${product} does one job well.`, hook: pain || product, points: ["pain"] },
+      { name: "How it's made", buyer: "people who care how things are made", promise: unique || `What sets ${product} apart.`, hook: unique || product, points: ["unique"] },
+      { name: "The everyday moment", buyer: "everyday users", promise: `${product}, in the moment you use it.`, hook: product, points: ["persona"] },
+    ] };
+  } else if (/Ask 3 or 4 short, specific questions/.test(prompt)) {
+    out = { questions: [
+      { field: "pain", question: `What annoys people about other ${product}s?`, example: "they break after a few months" },
+      { field: "unique", question: `How is your ${product} made, and by whom?`, example: "by hand, in small batches" },
+      { field: "proof", question: "What proof do you have that buyers like it?", example: "number of reviews, repeat buyers" },
+    ] };
+  } else {
+    const ids = [...prompt.matchAll(/\n- (a\d): /g)].map((m) => m[1]);
+    const n = /\nRewrite this /.test(prompt) ? 1 : Math.max(1, ids.length);
+    const lines = [pain && `${pain}? Not with this one.`, unique && `${unique}.`, `${product}.`].filter(Boolean);
+    out = { variants: Array.from({ length: n }, (_, i) => ({
+      angle: ids[i], text: `${lines[i % lines.length]}\n\n${lines.join(" ")}`,
+      hashtags: ["handmade", "shopsmall"],
+      uses: [pain && { field: "pain", phrase: pain }, unique && { field: "unique", phrase: unique }].filter(Boolean),
+    })) };
+  }
+  return new Promise((r) => setTimeout(() => r(JSON.stringify(out)), 600));
 }
 
 /* ----------------------------------------------------------- photo input */
@@ -374,6 +537,7 @@ async function handlePhoto(file) {
     $("#product").value = product;
     $("#details").value = details;
     $("#photo-undo").hidden = false;
+    renderStrength();
     setPhotoStatus("photo.done");
   } catch (err) {
     const where = `${err?.code || ""} ${err?.name || ""} ${err?.message || ""}`;
@@ -393,6 +557,7 @@ function undoPhoto() {
   $("#details").value = u.details;
   state.photo.undo = null;
   $("#photo-undo").hidden = true;
+  renderStrength();
   setPhotoStatus("photo.undone");
 }
 
@@ -517,21 +682,96 @@ function readBrief() {
   return {
     product: $("#product").value.trim(),
     details: $("#details").value.trim(),
+    persona: $("#persona").value.trim(),
+    pain: $("#pain").value.trim(),
+    unique: $("#unique").value.trim(),
+    proof: $("#proof").value.trim(),
+    objection: $("#objection").value.trim(),
     cta: $("#cta").value.trim(),
     language: $("#language").value,
-    count: Number($("#count").value),
+    count: Math.min(4, Number($("#count").value) || 3),
     platforms: [...document.querySelectorAll("#platforms input:checked")].map((i) => i.value),
   };
 }
 
 function applyBrief(b) {
   if (!b) return;
-  $("#product").value = b.product || "";
-  $("#details").value = b.details || "";
-  $("#cta").value = b.cta || "";
+  for (const id of ["product", "details", "persona", "pain", "unique", "proof", "objection", "cta"]) $(`#${id}`).value = b[id] || "";
   if (b.language && LANGUAGES.includes(b.language)) $("#language").value = b.language;
-  if (b.count) $("#count").value = String(b.count);
+  if (b.count) $("#count").value = String(Math.min(4, b.count));
   for (const i of document.querySelectorAll("#platforms input")) i.checked = (b.platforms || []).includes(i.value);
+  renderStrength();
+}
+
+/* How much the brief gives the model to work with, and what to add next. */
+const STRENGTH_ORDER = ["pain", "unique", "persona", "proof", "facts"];
+
+function renderStrength() {
+  const b = readBrief();
+  const filled = STRENGTH_ORDER.filter((k) => (b[pointField(k)] || "").length >= 8);
+  const level = filled.length >= 4 ? 2 : filled.length >= 2 ? 1 : 0;
+  const next = STRENGTH_ORDER.find((k) => !filled.includes(k));
+  const box = $("#strength");
+  box.dataset.level = String(level);
+  box.querySelectorAll(".strength-bar span").forEach((s, i) => s.classList.toggle("on", i < filled.length));
+  $("#strength-label").textContent = t(`strength.${level}`);
+  $("#strength-tip").textContent = next ? t(`tip.${next}`) : t("tip.done");
+}
+
+/* ------------------------------------------------- selling-point interview */
+
+async function startInterview() {
+  const b = readBrief();
+  if (!b.product) {
+    $("#interview-status").textContent = t("interview.need");
+    $("#product").focus();
+    return;
+  }
+  const btn = $("#interview-btn");
+  btn.disabled = true;
+  $("#interview-status").textContent = t("interview.loading");
+  try {
+    const questions = parseQuestions(await ask(interviewPrompt(b), 700, 0.6));
+    if (!questions.length) throw new Error(t("err.empty"));
+    const box = $("#interview-questions");
+    box.innerHTML = "";
+    questions.forEach((q, i) => {
+      const f = document.createElement("div");
+      f.className = "field";
+      const label = document.createElement("label");
+      label.htmlFor = `iq-${i}`;
+      label.textContent = q.question;
+      const input = document.createElement("input");
+      input.id = `iq-${i}`;
+      input.dataset.field = q.field;
+      input.maxLength = 300;
+      if (q.example) input.placeholder = t("interview.example", { text: q.example });
+      f.append(label, input);
+      box.append(f);
+    });
+    $("#interview-panel").hidden = false;
+    $("#interview-status").textContent = "";
+    $("#iq-0")?.focus();
+  } catch (err) {
+    $("#interview-status").textContent = t("interview.err", { reason: friendlyError(err) });
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function addInterviewAnswers() {
+  let added = 0;
+  for (const input of document.querySelectorAll("#interview-questions input")) {
+    const answer = input.value.trim();
+    if (!answer) continue;
+    const target = $(`#${input.dataset.field}`);
+    target.value = target.value.trim() ? `${target.value.trim()}; ${answer}` : answer;
+    added++;
+  }
+  $("#interview-panel").hidden = true;
+  $("#interview-questions").innerHTML = "";
+  $("#interview-status").textContent = added ? t("interview.added") : "";
+  renderStrength();
 }
 
 function setStatus(key, vars = {}, isError = false) {
@@ -548,6 +788,32 @@ function renderStatus() {
 
 /* -------------------------------------------------------------- generate */
 
+// Write one platform: draft, check, and redraft once if the check finds
+// clichés, invented numbers or copy that ignores the selling points.
+async function writePlatform(brief, p, brand, angles) {
+  const draft = async (feedback) => {
+    const variants = parseVariants(await ask(buildPrompt(brief, p, brand, angles, feedback)));
+    variants.forEach((v, i) => { if (!angles.some((a) => a.id === v.angle)) v.angle = angles[i]?.id; });
+    return { variants, checks: variants.map((v) => checkVariant(v, brief)) };
+  };
+  let best = await draft();
+  if (sumScore(best.checks) > 0) {
+    try {
+      const retry = await draft(feedbackFor(best.variants, best.checks));
+      if (sumScore(retry.checks) < sumScore(best.checks)) best = retry;
+    } catch {
+      // Keep the first draft; its remaining issues are shown on the variants.
+    }
+  }
+  return best.variants.map((v, i) => ({
+    angle: v.angle,
+    text: v.text,
+    hashtags: v.hashtags,
+    uses: best.checks[i].uses,
+    invented: best.checks[i].invented,
+  }));
+}
+
 async function generate(e) {
   e.preventDefault();
   if (state.busy) return;
@@ -561,16 +827,30 @@ async function generate(e) {
   const byPlatform = {};
   const errors = [];
   let done = 0;
-  setStatus("status.progress", { done: 0, n: brief.platforms.length });
 
-  // Two requests at a time keeps it quick without hammering the host quota.
+  // Stage 1: the angles. Every platform's copy is then built on them.
+  setStatus("status.strategy");
+  let angles;
+  try {
+    angles = parseAngles(await ask(strategyPrompt(brief, brand), 900, 0.7), brief.count);
+  } catch (err) {
+    state.busy = false;
+    $("#go").disabled = false;
+    setStatus("status.partial", { errors: friendlyError(err) }, true);
+    return;
+  }
+
+  // Stage 2: one variant per angle on each platform, checked in code and
+  // redrafted once with specific feedback if it is generic, invents numbers
+  // or ignores the seller's selling points.
+  setStatus("status.progress", { done: 0, n: brief.platforms.length });
   const queue = [...brief.platforms];
   async function worker() {
     while (queue.length) {
       const id = queue.shift();
       const p = PLATFORMS.find((x) => x.id === id);
       try {
-        byPlatform[id] = parseVariants(await ask(buildPrompt(brief, p, brand)));
+        byPlatform[id] = await writePlatform(brief, p, brand, angles);
       } catch (err) {
         errors.push(`${pName(p)}: ${friendlyError(err)}`);
       }
@@ -589,7 +869,7 @@ async function generate(e) {
     else setStatus("status.nothing", {}, true);
     return;
   }
-  state.results = { brief, brand: brand.name, byPlatform, at: Date.now() };
+  state.results = { brief, brand: brand.name, angles, byPlatform, at: Date.now() };
   state.tab = ids[0];
   renderResults();
   if (errors.length) setStatus("status.partial", { errors: errors.join(" · ") }, true);
@@ -620,6 +900,7 @@ function renderResults() {
   if (!r) return; // keep the empty state
   tabs.innerHTML = "";
   box.innerHTML = "";
+  renderAngles(r);
 
   const ids = r.brief.platforms.filter((id) => r.byPlatform[id]);
   tabs.setAttribute("role", "tablist");
@@ -648,6 +929,52 @@ function renderResults() {
   r.byPlatform[state.tab].forEach((v, i) => box.append(renderTag(p, v, i)));
 }
 
+const angleOf = (r, v) => (r.angles || []).find((a) => a.id === v.angle);
+
+function renderAngles(r) {
+  const box = $("#angle-list");
+  box.innerHTML = "";
+  $("#angles").hidden = !(r.angles && r.angles.length);
+  for (const a of r.angles || []) {
+    const card = document.createElement("article");
+    card.className = "angle";
+    const name = document.createElement("h3");
+    name.textContent = a.name;
+    const who = document.createElement("p");
+    who.className = "angle-who";
+    who.textContent = t("angle.for", { who: a.buyer });
+    const promise = document.createElement("p");
+    promise.className = "angle-promise";
+    promise.textContent = a.promise;
+    card.append(name, who, promise);
+    box.append(card);
+  }
+}
+
+function usesLine(v) {
+  const wrap = document.createElement("div");
+  wrap.className = "uses";
+  if (v.uses?.length) {
+    const label = document.createElement("span");
+    label.className = "uses-label";
+    label.textContent = t("uses.label");
+    wrap.append(label);
+    for (const f of v.uses) {
+      const chip = document.createElement("span");
+      chip.className = "use";
+      chip.textContent = t(`field.${f}`);
+      wrap.append(chip);
+    }
+  }
+  if (v.invented?.length) {
+    const warn = document.createElement("span");
+    warn.className = "use warn";
+    warn.textContent = t("check.numbers", { nums: v.invented.join(", ") });
+    wrap.append(warn);
+  }
+  return wrap;
+}
+
 function fullText(v) {
   return v.hashtags.length ? `${v.text}\n\n${v.hashtags.map((h) => "#" + h).join(" ")}` : v.text;
 }
@@ -655,7 +982,7 @@ function fullText(v) {
 function allText(r, ids) {
   return ids.map((id) => {
     const p = PLATFORMS.find((x) => x.id === id);
-    const variants = r.byPlatform[id].map((v, i) => `${t("variant", { i: i + 1 })}\n${fullText(v)}`).join("\n\n");
+    const variants = r.byPlatform[id].map((v, i) => `${angleOf(r, v)?.name || t("variant", { i: i + 1 })}\n${fullText(v)}`).join("\n\n");
     return `===== ${pName(p)} =====\n\n${variants}`;
   }).join("\n\n\n");
 }
@@ -725,8 +1052,16 @@ function renderTag(p, v, index) {
   );
   applyLengthLimits(actions, p, v);
 
+  const angle = state.results ? angleOf(state.results, v) : null;
+  if (angle) {
+    const a = document.createElement("p");
+    a.className = "tag-angle";
+    a.textContent = angle.name;
+    el.append(a);
+  }
   el.append(text);
   if (v.hashtags.length) el.append(tags);
+  if (v.uses?.length || v.invented?.length) el.append(usesLine(v));
   el.append(meter, actions);
   return el;
 }
@@ -784,7 +1119,7 @@ const styleOnly = (guide) => guide.replace(/\s*\d+\s*[–-]\s*\d+\s*words\.?/gi,
 
 const REWRITES = {
   shorter: "Make it shorter. Cut whole phrases rather than rewording. Keep the strongest idea and the call to action.",
-  longer: "Make it longer and richer. Add concrete detail from the product information above, a sensory moment or a use case. Keep the same voice, the same opening idea and the call to action. Never invent facts (prices, materials, sizes, awards, discounts) that are not in the product information.",
+  longer: "Make it longer and richer. Add concrete detail from the selling points above, a sensory moment or a use case. Keep the same voice, the same opening idea and the call to action. Never invent facts (prices, materials, sizes, awards, discounts) that are not in the brief.",
   warmer: "Make it warmer and more personal, as if the maker is talking. Keep about the same length.",
   cta: "Keep the idea but end with a clearer, more compelling call to action. Keep about the same length.",
 };
@@ -796,8 +1131,7 @@ function rewritePrompt(brand, p, brief, v, kind, maxChars) {
     : `The new text must be at most ${maxChars} characters long, hashtags not included. The current text is ${cur} characters.`;
   return `${brandBlock(brand)}
 
-Product: ${brief.product}
-Product information: ${brief.details || "(none given beyond the current text)"}
+${briefBlock(brief)}
 
 Platform: ${p.name}
 Style: ${styleOnly(p.guide)}
@@ -806,7 +1140,8 @@ Language: ${brief.language}
 Rewrite this ${p.name} text. ${REWRITES[kind]}
 ${length}
 Use at most ${v.hashtags.length} hashtags.
-Return exactly 1 variant.
+Return exactly 1 variant, with "uses": the selling points the new text uses (${POINTS.join(", ")}) and the exact phrase from the new text that carries each.
+Shape: {"variants":[{"text":"...","hashtags":["word"],"uses":[{"field":"pain","phrase":"..."}]}]}
 
 Text:
 ${v.text}
@@ -861,7 +1196,8 @@ async function rewrite(el, p, index, kind) {
     }
 
     const hashtags = p.hashtags === 0 ? [] : (next.hashtags.length ? next.hashtags : v.hashtags).slice(0, Math.max(v.hashtags.length, 1));
-    r.byPlatform[p.id][index] = { text: next.text, hashtags };
+    const check = checkVariant(next, r.brief);
+    r.byPlatform[p.id][index] = { angle: v.angle, text: next.text, hashtags, uses: check.uses.length ? check.uses : v.uses, invented: check.invented };
     save(KEYS.history, state.history);
     const fresh = renderTag(p, r.byPlatform[p.id][index], index);
     fresh.style.animationDelay = "0ms";
@@ -968,6 +1304,10 @@ async function boot() {
   renderUi();
 
   $("#brief").addEventListener("submit", generate);
+  $("#interview-btn").addEventListener("click", startInterview);
+  $("#interview-add").addEventListener("click", addInterviewAnswers);
+  $("#interview-close").addEventListener("click", () => { $("#interview-panel").hidden = true; });
+  for (const id of ["product", "details", "persona", "pain", "unique", "proof", "objection"]) $(`#${id}`).addEventListener("input", renderStrength);
 
   $("#brand").addEventListener("change", (e) => {
     if (e.target.value === "__new") {
