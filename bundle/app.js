@@ -146,8 +146,10 @@ function changeUiLang(id) {
   save(KEYS.uiLang, now);
 
   // The copy language follows along, unless the user picked a different one.
+  // (Only a choice made in this session counts: a language restored from the
+  // last brief follows the new interface language too.)
   const copyLang = $("#language");
-  if (copyLang.value === COPY_LANG_FOR_UI[before]) copyLang.value = COPY_LANG_FOR_UI[now];
+  if (!state.copyLangPicked || copyLang.value === COPY_LANG_FOR_UI[before]) copyLang.value = COPY_LANG_FOR_UI[now];
 
   renderUi();
 }
@@ -205,7 +207,12 @@ Rules:
 - No hype words without a fact behind them. Never use: ${CLICHES.slice(0, 33).join(", ")}.
 - Never invent facts: no numbers, ratings, reviews, awards, materials, origins, guarantees, prices or discounts that are not in the brief.
 - Vary sentence length. At most one question and at most one exclamation mark per text.
+- Always write in the output language the task names, even when the brief, the brand notes or the photo are in another language. Translate the seller's details instead of copying them in their language.
 Respond with JSON only, no markdown fences.`;
+
+// Put at the top and the bottom of every prompt that produces copy, so the
+// output language cannot get lost in a long brief written in another language.
+const langRule = (lang) => `OUTPUT LANGUAGE: ${lang}. Write every text value (names, copy, hashtags) in ${lang} only, even if the brief below is written in another language; translate the seller's details into ${lang}. Brand and product names may stay as they are.`;
 
 function briefBlock(b) {
   const v = (x) => x || "(not given)";
@@ -219,8 +226,10 @@ Main doubt, and the seller's answer: ${v(b.objection)}
 Call to action: ${b.cta || "(choose a natural one for the platform, without inventing offers)"}`;
 }
 
-function strategyPrompt(b, brand) {
-  return `Find the ${b.count} strongest, clearly different angles for selling this product.
+function strategyPrompt(b, brand, feedback) {
+  return `${langRule(b.language)}
+
+Find the ${b.count} strongest, clearly different angles for selling this product.
 
 ${brandBlock(brand)}
 
@@ -228,13 +237,15 @@ ${briefBlock(b)}
 
 An angle is one reason to buy, aimed at one buyer in one situation. Base every angle on the selling points above and invent nothing. Make the angles really different, for example: the problem it fixes, the craft behind it, the moment it is used, the person it is a gift for, the doubt it answers.
 For each angle give: name (2 to 4 words), buyer (who, in a short phrase), promise (what they get, one sentence), hook (a specific opening idea, not a slogan), points (the selling points it rests on, from: ${POINTS.join(", ")}).
-Write in ${b.language}.
+Write name, buyer, promise and hook in ${b.language}.${feedback ? `\n\n${feedback}` : ""}
 
 Return exactly: {"angles":[{"id":"a1","name":"...","buyer":"...","promise":"...","hook":"...","points":["pain","unique"]}]}`;
 }
 
 function buildPrompt(brief, platform, brand, angles, feedback) {
-  return `${brandBlock(brand)}
+  return `${langRule(brief.language)}
+
+${brandBlock(brand)}
 
 ${briefBlock(brief)}
 
@@ -242,12 +253,34 @@ Platform: ${platform.name}
 Format: ${platform.guide}
 Hard limit: ${platform.limit} characters per text.
 Hashtags per variant: ${platform.hashtags === 0 ? "none (empty array)" : `${Math.max(2, platform.hashtags - 3)}–${platform.hashtags}`}, specific to this product and buyer, not generic.
-Language: write everything in ${brief.language}.
+Language: write every text and every hashtag in ${brief.language}.
 
 Write exactly ${angles.length} variants, one per angle, in this order:
 ${angles.map((a) => `- ${a.id}: ${a.name}. For ${a.buyer}. Promise: ${a.promise}. Hook idea: ${a.hook}`).join("\n")}
 
 For each variant also list "uses": the selling points the text really uses, each with its field (${POINTS.join(", ")}) and the exact short phrase from YOUR text that carries it.${feedback ? `\n\nYour previous draft had problems. Fix them:\n${feedback}` : ""}
+
+Return exactly: {"variants":[{"angle":"a1","text":"...","hashtags":["word"],"uses":[{"field":"pain","phrase":"..."}]}]}
+Remember: ${brief.language} only.`;
+}
+
+function translateAnglesPrompt(angles, lang) {
+  return `${langRule(lang)}
+
+Translate the values of these selling angles into ${lang}. Keep the "id" and "points" values as they are.
+
+${JSON.stringify({ angles })}
+
+Return exactly: {"angles":[{"id":"a1","name":"...","buyer":"...","promise":"...","hook":"...","points":["pain"]}]}`;
+}
+
+// Last resort when a draft is still in the wrong language: translate it.
+function translatePrompt(variants, lang) {
+  return `${langRule(lang)}
+
+Translate these social media texts into ${lang}. Keep the meaning, the tone, the line breaks, the emoji and roughly the same length. Translate the hashtags too (one word or compound each, no # sign). Keep the "angle" values and keep "uses" phrases matching your translated text.
+
+${JSON.stringify({ variants: variants.map((v) => ({ angle: v.angle, text: v.text, hashtags: v.hashtags, uses: v.uses || [] })) })}
 
 Return exactly: {"variants":[{"angle":"a1","text":"...","hashtags":["word"],"uses":[{"field":"pain","phrase":"..."}]}]}`;
 }
@@ -299,18 +332,67 @@ function verifiedUses(v, brief) {
   return fields;
 }
 
+/* Is a text written in the language the user picked? Checked in code, since
+   models tend to answer in the language of the brief instead. Two signals:
+   the script (Latin, Han, Cyrillic…) and, between Latin languages, common
+   function words. Short texts and mixed product names are tolerated. */
+const SCRIPT_OF = {
+  "中文": /\p{Script=Han}/u,
+  "日本語": /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u,
+  "한국어": /\p{Script=Hangul}/u,
+  "Русский": /\p{Script=Cyrillic}/u,
+  "हिन्दी": /\p{Script=Devanagari}/u,
+};
+const LATIN = /\p{Script=Latin}/u;
+const STOPWORDS = {
+  English: "the and with for you your this that it is are to of in on from what when who not but just its our",
+  Deutsch: "der die das und mit für du dein deine ist sind nicht ein eine einen auch auf von zu wenn wer dem den sich noch",
+  "Español": "el la los las y con para tu es son no un una que de en por del se lo",
+  "Français": "le la les et avec pour tu ton ta vous est sont pas un une que de du en des ce qui",
+  Italiano: "il lo la gli le e con per tu tuo è sono non un una che di in del della",
+  "Português": "o os as e com para você seu sua é são não um uma que de em do da",
+  Nederlands: "de het een en met voor je jouw is zijn niet dat van op ook wat",
+  Polski: "i w z na do nie to jest są się że dla jak ten ta",
+  "Türkçe": "ve bir bu ile için de da çok ne gibi daha olan",
+};
+const STOPSETS = Object.fromEntries(Object.entries(STOPWORDS).map(([k, v]) => [k, new Set(v.split(" "))]));
+
+function wrongLanguage(text, lang, strict = false) {
+  const letters = [...String(text || "").replace(/#\S+/g, " ")].filter((c) => /\p{L}/u.test(c));
+  if (letters.length < 12) return false;
+  const script = SCRIPT_OF[lang];
+  if (script) {
+    // CJK counts one letter per word, so a few Latin product names weigh a lot: be lenient.
+    const share = letters.filter((c) => script.test(c)).length / letters.length;
+    return share < (lang === "Русский" || lang === "हिन्दी" ? 0.5 : 0.3);
+  }
+  // A Latin-script language: almost no letters from other scripts…
+  const foreign = letters.filter((c) => !LATIN.test(c)).length / letters.length;
+  if (foreign > (strict ? 0.1 : 0.2)) return true;
+  // …and not clearly another Latin language.
+  const own = STOPSETS[lang];
+  if (!own) return false;
+  const words = String(text).toLowerCase().replace(/#\S+/g, " ").match(/\p{L}+/gu) || [];
+  if (words.length < 10) return false;
+  const hits = Object.fromEntries(Object.entries(STOPSETS).map(([k, set]) => [k, words.filter((w) => set.has(w)).length]));
+  const [topLang, top] = Object.entries(hits).sort((a, b) => b[1] - a[1])[0];
+  return topLang !== lang && top >= 4 && top >= 2 * (hits[lang] + 1);
+}
+
 function checkVariant(v, brief) {
   const cliches = clichesIn(v.text);
   const invented = inventedNumbers(v.text, brief);
   const uses = verifiedUses(v, brief);
   const weak = filledPoints(brief).length >= 2 && uses.length < 2;
-  return { cliches, invented, uses, weak, score: cliches.length * 2 + invented.length * 3 + (weak ? 2 : 0) };
+  const wrongLang = wrongLanguage(`${v.text} ${(v.hashtags || []).join(" ")}`, brief.language);
+  return { cliches, invented, uses, weak, wrongLang, score: cliches.length * 2 + invented.length * 3 + (weak ? 2 : 0) + (wrongLang ? 20 : 0) };
 }
 
-function feedbackFor(variants, checks) {
+function feedbackFor(variants, checks, lang) {
   return variants.map((v, i) => {
     const c = checks[i];
     const parts = [];
+    if (c.wrongLang) parts.push(`it is not written in ${lang}: write the whole text and the hashtags in ${lang}`);
     if (c.cliches.length) parts.push(`remove the clichés ${c.cliches.map((x) => `"${x}"`).join(", ")} and say something concrete instead`);
     if (c.invented.length) parts.push(`remove these numbers, they are not in the brief: ${c.invented.join(", ")}`);
     if (c.weak) parts.push("build it on at least two of the seller's selling points, using their concrete details");
@@ -440,7 +522,7 @@ Return exactly: {"product":"...","details":"..."}
 - details: comma-separated facts a buyer would care about that you can SEE: type, colours, shape, pattern, finish, style, how it is used or shown, and any text printed on the product.
 - Never guess size, weight, capacity, price, brand, origin or materials that are not obvious from the photo.
 - If no product is visible, return {"product":"","details":""}.
-Write both values in ${language}.`;
+Write both values in ${language} only, also when text on the product is in another language (quote printed text as it is).`;
 }
 
 // Read a file into a resized JPEG (keeps uploads small and decodes HEIC-free
@@ -689,6 +771,7 @@ function readBrief() {
     objection: $("#objection").value.trim(),
     cta: $("#cta").value.trim(),
     language: $("#language").value,
+    languagePicked: !!state.copyLangPicked,
     count: Math.min(4, Number($("#count").value) || 3),
     platforms: [...document.querySelectorAll("#platforms input:checked")].map((i) => i.value),
   };
@@ -697,7 +780,11 @@ function readBrief() {
 function applyBrief(b) {
   if (!b) return;
   for (const id of ["product", "details", "persona", "pain", "unique", "proof", "objection", "cta"]) $(`#${id}`).value = b[id] || "";
-  if (b.language && LANGUAGES.includes(b.language)) $("#language").value = b.language;
+  // Restore the copy language only if the user chose it; otherwise it follows the interface.
+  if (b.languagePicked && b.language && LANGUAGES.includes(b.language)) {
+    $("#language").value = b.language;
+    state.copyLangPicked = true;
+  } else $("#language").value = COPY_LANG_FOR_UI[uiLang()] || $("#language").value;
   if (b.count) $("#count").value = String(Math.min(4, b.count));
   for (const i of document.querySelectorAll("#platforms input")) i.checked = (b.platforms || []).includes(i.value);
   renderStrength();
@@ -799,11 +886,30 @@ async function writePlatform(brief, p, brand, angles) {
   let best = await draft();
   if (sumScore(best.checks) > 0) {
     try {
-      const retry = await draft(feedbackFor(best.variants, best.checks));
+      const retry = await draft(feedbackFor(best.variants, best.checks, brief.language));
       if (sumScore(retry.checks) < sumScore(best.checks)) best = retry;
     } catch {
       // Keep the first draft; its remaining issues are shown on the variants.
     }
+  }
+  // Still in the wrong language: translate those variants rather than show them.
+  const wrong = best.variants.filter((_, i) => best.checks[i].wrongLang);
+  if (wrong.length) {
+    try {
+      const fixed = parseVariants(await ask(translatePrompt(wrong, brief.language), 1400, 0.3));
+      wrong.forEach((v, j) => {
+        const f = fixed[j];
+        const c = f && checkVariant(f, brief);
+        if (c && !c.wrongLang) {
+          const i = best.variants.indexOf(v);
+          best.variants[i] = { ...f, angle: v.angle };
+          best.checks[i] = c;
+        }
+      });
+    } catch {
+      // Fall through to the check below.
+    }
+    if (best.checks.some((c) => c.wrongLang)) throw new Error(t("err.wrongLang", { language: brief.language }));
   }
   return best.variants.map((v, i) => ({
     angle: v.angle,
@@ -833,6 +939,20 @@ async function generate(e) {
   let angles;
   try {
     angles = parseAngles(await ask(strategyPrompt(brief, brand), 900, 0.7), brief.count);
+    const offLang = (list) => list.some((a) => wrongLanguage(`${a.name} ${a.buyer} ${a.promise} ${a.hook}`, brief.language, true));
+    if (offLang(angles)) {
+      const again = parseAngles(await ask(strategyPrompt(brief, brand, `Your previous answer was not in ${brief.language}. Write every name, buyer, promise and hook in ${brief.language}, and translate the seller's words instead of quoting them.`), 900, 0.5), brief.count);
+      if (!offLang(again)) angles = again;
+      else {
+        // Still not right: translate the angles themselves.
+        try {
+          const tr = parseAngles(await ask(translateAnglesPrompt(again, brief.language), 900, 0.3), brief.count);
+          if (!offLang(tr)) angles = tr.map((a, i) => ({ ...a, points: again[i]?.points || a.points }));
+        } catch {
+          // Keep the angles; the copy itself is checked and fixed below.
+        }
+      }
+    }
   } catch (err) {
     state.busy = false;
     $("#go").disabled = false;
@@ -1129,13 +1249,15 @@ function rewritePrompt(brand, p, brief, v, kind, maxChars) {
   const length = kind === "longer"
     ? `The new text must be longer than the current ${cur} characters, ideally around ${maxChars} characters, and at most ${maxChars} characters long, hashtags not included. The current text is ${cur} characters.`
     : `The new text must be at most ${maxChars} characters long, hashtags not included. The current text is ${cur} characters.`;
-  return `${brandBlock(brand)}
+  return `${langRule(brief.language)}
+
+${brandBlock(brand)}
 
 ${briefBlock(brief)}
 
 Platform: ${p.name}
 Style: ${styleOnly(p.guide)}
-Language: ${brief.language}
+Language: ${brief.language}. If the current text is in another language, write the new one in ${brief.language}.
 
 Rewrite this ${p.name} text. ${REWRITES[kind]}
 ${length}
@@ -1175,7 +1297,7 @@ async function rewrite(el, p, index, kind) {
       const target = Math.max(minLength(v.text), Math.round(cur * 0.65));
       for (const maxChars of [target, Math.max(minLength(v.text), Math.round(cur * 0.5))]) {
         const [cand] = parseVariants(await ask(rewritePrompt(brand, p, r.brief, v, kind, maxChars), 700));
-        if (charLen(cand.text) < cur) { next = cand; break; }
+        if (charLen(cand.text) < cur && !wrongLanguage(cand.text, r.brief.language)) { next = cand; break; }
       }
       if (!next) throw new Error(t("err.noShorter"));
     } else if (kind === "longer") {
@@ -1187,12 +1309,16 @@ async function rewrite(el, p, index, kind) {
       for (const maxChars of [target, Math.min(max, Math.round(cur * 1.25) + 10)]) {
         const [cand] = parseVariants(await ask(rewritePrompt(brand, p, r.brief, v, kind, maxChars), 900));
         const len = charLen(cand.text);
-        if (len > cur && len <= max) { next = cand; break; }
+        if (len > cur && len <= max && !wrongLanguage(cand.text, r.brief.language)) { next = cand; break; }
       }
       if (!next) throw new Error(t("err.noLonger"));
     } else {
       const maxChars = Math.min(maxLength(p, v), Math.round(cur * 1.15) + 20);
-      [next] = parseVariants(await ask(rewritePrompt(brand, p, r.brief, v, kind, maxChars), 700));
+      for (let tries = 0; tries < 2 && !next; tries++) {
+        const [cand] = parseVariants(await ask(rewritePrompt(brand, p, r.brief, v, kind, maxChars), 700));
+        if (!wrongLanguage(cand.text, r.brief.language)) next = cand;
+      }
+      if (!next) throw new Error(t("err.wrongLang", { language: r.brief.language }));
     }
 
     const hashtags = p.hashtags === 0 ? [] : (next.hashtags.length ? next.hashtags : v.hashtags).slice(0, Math.max(v.hashtags.length, 1));
@@ -1276,6 +1402,7 @@ async function boot() {
     save(KEYS.theme, applyTheme(next));
   });
   $("#ui-lang").addEventListener("change", (e) => changeUiLang(e.target.value));
+  $("#language").addEventListener("change", () => { state.copyLangPicked = true; });
   wirePhoto();
 
   await connect();
