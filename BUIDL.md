@@ -30,7 +30,7 @@ Output in 12 languages. The last 12 results are saved and can be reopened.
 - The model answers in strict JSON, which the app validates and renders as individual "hang tags" with copy buttons and length meters.
 - Rewrites send a single variant back with one targeted instruction.
 - Guardrail: the prompt forbids inventing prices, materials, awards or discounts the user did not provide.
-- Brand voices, the last brief and history persist per user with `anna.storage`.
+- Brand voices, product profiles, the last brief and the generation history persist per user with `anna.storage`; reopening past copy costs no tokens.
 
 ### Fit with Anna
 Caption Studio is a pure Anna App: a static SPA bundle running in the Anna iframe, using the host LLM and host storage. No separate backend, no API keys, no extra accounts — install and start writing.

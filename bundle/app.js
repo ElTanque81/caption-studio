@@ -41,6 +41,7 @@ const KEYS = {
   brands: "caption-studio:brands",
   activeBrand: "caption-studio:active-brand",
   history: "caption-studio:history",
+  products: "caption-studio:products",
   last: "caption-studio:last-brief",
   theme: "caption-studio:theme",
   uiLang: "caption-studio:ui-lang",
@@ -84,6 +85,9 @@ const state = {
   brands: [],
   activeBrandId: "default",
   history: [],
+  products: [], // saved product profiles: the brief without platforms
+  productId: null, // the profile that is loaded in the form
+  historyAll: false, // show the history of every product, not just the loaded one
   results: null, // { brief, byPlatform: { [id]: [{ text, hashtags }] } }
   tab: null,
   busy: false,
@@ -164,6 +168,7 @@ function renderUi() {
     chip.querySelector(".pname").textContent = pName(PLATFORMS.find((p) => p.id === chip.dataset.id));
   }
   renderBrands();
+  renderProducts();
   renderStatus();
   renderPhotoStatus();
   renderStrength();
@@ -989,15 +994,19 @@ async function generate(e) {
     else setStatus("status.nothing", {}, true);
     return;
   }
-  state.results = { brief, brand: brand.name, angles, byPlatform, at: Date.now() };
+  // The product is kept as a profile, so it can be reused without retyping.
+  const prod = await saveProduct({ quiet: true });
+  state.results = { brief, brand: brand.name, angles, byPlatform, at: Date.now(), productId: prod?.id || null };
   state.tab = ids[0];
   renderResults();
+  showResults();
   if (errors.length) setStatus("status.partial", { errors: errors.join(" · ") }, true);
   else setStatus("status.done");
 
   state.history.unshift(state.results);
-  state.history = state.history.slice(0, 12);
+  state.history = state.history.slice(0, 20);
   renderHistory();
+  renderProducts();
   save(KEYS.history, state.history);
   save(KEYS.last, brief);
 }
@@ -1362,31 +1371,142 @@ function toast(msg) {
   toastTimer = setTimeout(() => el.classList.remove("show"), 2800);
 }
 
+/* -------------------------------------------------------------- products */
+
+// A product profile is the reusable part of a brief: name, facts, selling
+// points and call to action. It is saved to the user's Anna account, so a
+// product is described once and reused for every later generation.
+const PRODUCT_FIELDS = ["product", "details", "persona", "pain", "unique", "proof", "objection", "cta"];
+const sameName = (a, b) => norm(a || "") === norm(b || "");
+const currentProduct = () => state.products.find((x) => x.id === state.productId) || null;
+const historyFor = (prod) => state.history.filter((h) => (h.productId ? h.productId === prod.id : sameName(h.brief.product, prod.product)));
+
+function renderProducts() {
+  const sel = $("#product-pick");
+  sel.innerHTML = "";
+  sel.add(new Option(t("products.new"), ""));
+  for (const x of [...state.products].sort((a, b) => (b.updated || 0) - (a.updated || 0))) sel.add(new Option(x.product, x.id));
+  sel.value = currentProduct() ? state.productId : "";
+  const del = $("#product-delete");
+  del.hidden = !currentProduct();
+  del.textContent = t("products.delete");
+  delete del.dataset.armed;
+  const cur = currentProduct();
+  $("#product-hint").textContent = cur
+    ? t("products.hintSaved", { n: historyFor(cur).length })
+    : t(state.products.length ? "products.hintPick" : "products.hintNew");
+}
+
+function pickProduct(id) {
+  const prod = state.products.find((x) => x.id === id) || null;
+  state.productId = prod ? prod.id : null;
+  state.historyAll = false;
+  for (const f of PRODUCT_FIELDS) $(`#${f}`).value = prod ? prod[f] || "" : "";
+  if (!prod) $("#product").focus({ preventScroll: true });
+  renderStrength();
+  renderProducts();
+  renderHistory();
+}
+
+// Save the form as a product profile. The loaded profile is updated when its
+// name still matches; another name updates the profile with that name or
+// creates a new one, so typing a new product never overwrites an old one.
+async function saveProduct({ quiet = false } = {}) {
+  const b = readBrief();
+  if (!b.product) {
+    if (!quiet) setStatus("status.needProduct", {}, true);
+    return null;
+  }
+  let prod = currentProduct();
+  if (!prod || !sameName(prod.product, b.product)) prod = state.products.find((x) => sameName(x.product, b.product)) || null;
+  if (!prod) {
+    prod = { id: `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}` };
+    state.products.unshift(prod);
+  }
+  for (const f of PRODUCT_FIELDS) prod[f] = b[f];
+  prod.updated = Date.now();
+  state.products = state.products.slice(0, 60);
+  state.productId = prod.id;
+  await save(KEYS.products, state.products);
+  renderProducts();
+  renderHistory();
+  if (!quiet) toast(t("toast.productSaved", { product: prod.product }));
+  return prod;
+}
+
+// Two clicks, no confirm(): blocking dialogs are unreliable inside the host frame.
+async function deleteProduct() {
+  const del = $("#product-delete");
+  const prod = currentProduct();
+  if (!prod) return;
+  if (!del.dataset.armed) {
+    del.dataset.armed = "1";
+    del.textContent = t("products.confirm");
+    setTimeout(() => { if (del.dataset.armed) { delete del.dataset.armed; del.textContent = t("products.delete"); } }, 4000);
+    return;
+  }
+  state.products = state.products.filter((x) => x.id !== prod.id);
+  state.productId = null;
+  await save(KEYS.products, state.products);
+  renderProducts();
+  renderHistory();
+  toast(t("toast.productDeleted", { product: prod.product }));
+}
+
 /* --------------------------------------------------------------- history */
 
 function renderHistory() {
   const ul = $("#history");
   ul.innerHTML = "";
-  state.history.forEach((h) => {
+  const cur = currentProduct();
+  // Only this product's entries, unless it has none yet or the user asked for all.
+  const filtered = cur && !state.historyAll && historyFor(cur).length > 0;
+  const list = filtered ? historyFor(cur) : state.history;
+  $("#history-title").textContent = filtered ? t("history.titleFor", { product: cur.product }) : t("history.title");
+  $("#history-all").hidden = !cur || state.historyAll || list.length === state.history.length;
+  const when = (ts) => {
+    try { return new Date(ts).toLocaleString(uiLang(), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); } catch { return ""; }
+  };
+  for (const h of list) {
     const li = document.createElement("li");
     const names = h.brief.platforms
       .filter((id) => h.byPlatform[id])
       .map((id) => pName(PLATFORMS.find((p) => p.id === id)))
       .join(", ");
-    const b = button("", "", () => {
+    const open = button("", "h-open", () => {
       state.results = h;
       state.tab = h.brief.platforms.find((id) => h.byPlatform[id]);
       applyBrief(h.brief);
+      const prod = state.products.find((x) => x.id === h.productId) || state.products.find((x) => sameName(x.product, h.brief.product));
+      state.productId = prod ? prod.id : null;
+      renderProducts();
       renderResults();
-      $("#results").scrollIntoView({ behavior: "smooth", block: "start" });
+      renderHistory();
+      showResults();
     });
-    b.append(document.createTextNode(h.brief.product), document.createElement("br"));
+    if (h === state.results) open.classList.add("current");
+    open.append(document.createTextNode(h.brief.product), document.createElement("br"));
     const small = document.createElement("small");
-    small.textContent = names;
-    b.append(small);
-    li.append(b);
+    small.textContent = [names, h.at ? when(h.at) : ""].filter(Boolean).join(" · ");
+    open.append(small);
+    const del = button("×", "h-del", () => {
+      state.history = state.history.filter((x) => x !== h);
+      save(KEYS.history, state.history);
+      renderHistory();
+      renderProducts();
+    });
+    del.setAttribute("aria-label", t("history.delete", { product: h.brief.product }));
+    del.title = t("history.delete", { product: h.brief.product });
+    li.append(open, del);
     ul.append(li);
-  });
+  }
+}
+
+// Bring the results into view only when they are not already visible.
+function showResults() {
+  const rack = document.querySelector(".rack");
+  const top = rack.getBoundingClientRect().top;
+  if (top < 0 || top > window.innerHeight * 0.5) rack.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 /* ------------------------------------------------------------------ boot */
@@ -1419,10 +1539,16 @@ async function boot() {
   if (!Array.isArray(state.brands) || !state.brands.length) state.brands = [DEFAULT_BRAND];
   state.activeBrandId = await load(KEYS.activeBrand, state.brands[0].id);
   state.history = (await load(KEYS.history, [])) || [];
+  state.products = (await load(KEYS.products, [])) || [];
+  if (!Array.isArray(state.products)) state.products = [];
+  if (!Array.isArray(state.history)) state.history = [];
 
   const last = await load(KEYS.last, null);
-  if (last) applyBrief(last);
-  else {
+  if (last) {
+    applyBrief(last);
+    const prod = state.products.find((x) => sameName(x.product, last.product));
+    state.productId = prod ? prod.id : null;
+  } else {
     document.querySelector('#platforms input[value="instagram"]').checked = true;
     $("#language").value = COPY_LANG_FOR_UI[uiLang()] || $("#language").value;
   }
@@ -1431,6 +1557,10 @@ async function boot() {
   renderUi();
 
   $("#brief").addEventListener("submit", generate);
+  $("#product-pick").addEventListener("change", (e) => pickProduct(e.target.value));
+  $("#product-save").addEventListener("click", () => saveProduct());
+  $("#product-delete").addEventListener("click", deleteProduct);
+  $("#history-all").addEventListener("click", () => { state.historyAll = true; renderHistory(); });
   $("#interview-btn").addEventListener("click", startInterview);
   $("#interview-add").addEventListener("click", addInterviewAnswers);
   $("#interview-close").addEventListener("click", () => { $("#interview-panel").hidden = true; });

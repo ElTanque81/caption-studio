@@ -33,6 +33,17 @@
           </div>
 
           <h2 class="step"><span class="step-n">1</span><span data-i18n="step.product">Product</span></h2>
+          <div class="field products">
+            <div class="row-between">
+              <label for="product-pick" data-i18n="products.label">My products</label>
+              <span class="row-links">
+                <button type="button" class="link" id="product-save" data-i18n="products.save">Save product</button>
+                <button type="button" class="link danger" id="product-delete" data-i18n="products.delete" hidden>Delete</button>
+              </span>
+            </div>
+            <select id="product-pick"></select>
+            <p class="field-hint" id="product-hint"></p>
+          </div>
           <div class="photo" id="photo">
             <input type="file" id="photo-input" accept="image/*" hidden />
             <button type="button" class="photo-drop" id="photo-drop">
@@ -150,8 +161,12 @@
             <p data-i18n="empty.body">Describe a product on the left and choose where it will be posted. Each variant comes with hashtags and a length check for that platform.</p>
           </div>
         </div>
-        <section class="history" data-i18n-aria="history.title" aria-label="Recent">
-          <h2 data-i18n="history.title">Recent</h2>
+        <section class="history" id="history-section" data-i18n-aria="history.title" aria-label="Generation history">
+          <div class="row-between">
+            <h2 id="history-title" data-i18n="history.title">Generation history</h2>
+            <button type="button" class="link" id="history-all" data-i18n="history.showAll" hidden>Show all products</button>
+          </div>
+          <p class="history-hint" data-i18n="history.hint">Open earlier copy again without using tokens.</p>
           <ul id="history"></ul>
         </section>
       </main>

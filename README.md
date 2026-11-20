@@ -28,11 +28,13 @@ A one-line prompt like "write an Instagram caption for my ceramic mug" gives the
 - **Share.** Pre-filled posts for X and LinkedIn; copy-and-open for Instagram, TikTok and Pinterest; "Copy all platforms".
 - **Start from a photo.** Resized in the browser and read with the host's vision model.
 - **Five interface languages** (English, German, Chinese, Russian, Hindi) and **14 copy languages**. The copy always follows the selected copy language, also when the brief or the photo is in another language: every prompt names the output language at the top, and the result is checked in code (script and common words). Angles, variants and rewrites in the wrong language are redone once, then translated; nothing in the wrong language is shown.
-- **History, light and dark mode.**
+- **My products.** Every product you write copy for is saved to your account with its facts, selling points and call to action. Pick it again later and the whole brief is filled in; save, rename or delete products by hand.
+- **Generation history.** The last 20 generations are kept with their copy, angles, platforms and time, filtered to the product you picked. Opening one shows the copy again without a model call, so it costs no tokens.
+- **Light and dark mode.**
 
 ## How AI is used
 
-All calls go through `anna.llm.complete`: one call for the angles, one per platform for the copy (two in parallel), one optional call for the selling-point questions, one for a photo, and one per rewrite. Model output is strict JSON and is validated before it is shown. Brand voices, the last brief and the history are stored per user with `anna.storage`.
+All calls go through `anna.llm.complete`: one call for the angles, one per platform for the copy (two in parallel), one optional call for the selling-point questions, one for a photo, and one per rewrite. Model output is strict JSON and is validated before it is shown. Brand voices, product profiles, the last brief and the history are stored per user with `anna.storage`.
 
 ## Project layout
 
