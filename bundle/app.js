@@ -231,6 +231,22 @@ Main doubt, and the seller's answer: ${v(b.objection)}
 Call to action: ${b.cta || "(choose a natural one for the platform, without inventing offers)"}`;
 }
 
+// The seller's best past posts for this product (from the Product manager).
+// They teach voice and framing; facts in them are not facts of the brief.
+const MAX_REFS = 5;
+function splitRefs(text) {
+  return String(text || "")
+    .split(/\n\s*-{3,}\s*\n/)
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .slice(0, MAX_REFS);
+}
+function refsBlock(b) {
+  const refs = splitRefs(b.refs);
+  if (!refs.length) return "";
+  return `\nThe seller's own past posts that performed well (style reference only). Match their voice, rhythm, sentence length and framing. Never copy their sentences, and never take facts, numbers or offers from them that are not in the brief:\n${refs.map((r, i) => `<<<post ${i + 1}>>>\n${r.slice(0, 1200)}`).join("\n")}\n<<<end>>>\n`;
+}
+
 function strategyPrompt(b, brand, feedback) {
   return `${langRule(b.language)}
 
@@ -253,7 +269,7 @@ function buildPrompt(brief, platform, brand, angles, feedback) {
 ${brandBlock(brand)}
 
 ${briefBlock(brief)}
-
+${refsBlock(brief)}
 Platform: ${platform.name}
 Format: ${platform.guide}
 Hard limit: ${platform.limit} characters per text.
@@ -778,6 +794,7 @@ function readBrief() {
     language: $("#language").value,
     languagePicked: !!state.copyLangPicked,
     count: Math.min(4, Number($("#count").value) || 3),
+    refs: (() => { const prod = currentProduct(); return prod && sameName(prod.product, $("#product").value.trim()) ? prod.refs || "" : ""; })(),
     platforms: [...document.querySelectorAll("#platforms input:checked")].map((i) => i.value),
   };
 }
@@ -849,6 +866,12 @@ async function startInterview() {
   } finally {
     btn.disabled = false;
   }
+}
+
+function closeInterview() {
+  $("#interview-panel").hidden = true;
+  $("#interview-questions").innerHTML = "";
+  $("#interview-status").textContent = "";
 }
 
 function addInterviewAnswers() {
@@ -1026,9 +1049,16 @@ function renderResults() {
   const r = state.results;
   const tabs = $("#tabs");
   const box = $("#results");
-  if (!r) return; // keep the empty state
   tabs.innerHTML = "";
   box.innerHTML = "";
+  if (!r) {
+    // Nothing for this product yet: back to the empty state.
+    $("#angles").hidden = true;
+    for (const el of EMPTY.querySelectorAll("[data-i18n]")) el.textContent = t(el.dataset.i18n);
+    box.append(EMPTY);
+    renderChat();
+    return;
+  }
   renderAngles(r);
 
   const ids = r.brief.platforms.filter((id) => r.byPlatform[id]);
@@ -1054,10 +1084,13 @@ function renderResults() {
     tabs.append(all);
   }
 
+  if (!r.byPlatform[state.tab]) state.tab = ids[0];
   const p = PLATFORMS.find((x) => x.id === state.tab);
   r.byPlatform[state.tab].forEach((v, i) => box.append(renderTag(p, v, i)));
+  renderChat();
 }
 
+let EMPTY = null; // the empty-state element, kept to show again
 const angleOf = (r, v) => (r.angles || []).find((a) => a.id === v.angle);
 
 function renderAngles(r) {
@@ -1263,7 +1296,7 @@ function rewritePrompt(brand, p, brief, v, kind, maxChars) {
 ${brandBlock(brand)}
 
 ${briefBlock(brief)}
-
+${refsBlock(brief)}
 Platform: ${p.name}
 Style: ${styleOnly(p.guide)}
 Language: ${brief.language}. If the current text is in another language, write the new one in ${brief.language}.
@@ -1371,6 +1404,393 @@ function toast(msg) {
   toastTimer = setTimeout(() => el.classList.remove("show"), 2800);
 }
 
+/* ------------------------------------------------------- product manager */
+//
+// One place to manage every product: facts, target audience, selling points,
+// call to action and a swipe file of the seller's best past posts. Saved to
+// the user's Anna account with the same profiles the brief uses.
+
+const pm = { id: null }; // product shown in the editor; null = a new one
+const pmFields = () => [...PRODUCT_FIELDS, "refs"];
+
+function openProductManager() {
+  pm.id = currentProduct()?.id || state.products[0]?.id || null;
+  renderPm();
+  $("#pm-dialog").showModal();
+}
+
+function renderPm() {
+  const ul = $("#pm-items");
+  ul.innerHTML = "";
+  const list = [...state.products].sort((a, b) => (b.updated || 0) - (a.updated || 0));
+  if (!list.length) {
+    const li = document.createElement("li");
+    li.className = "field-hint";
+    li.textContent = t("pm.empty");
+    ul.append(li);
+  }
+  for (const x of list) {
+    const li = document.createElement("li");
+    const b = button("", "", () => { pm.id = x.id; renderPm(); });
+    b.append(document.createTextNode(x.product));
+    const small = document.createElement("small");
+    const n = splitRefs(x.refs).length;
+    small.textContent = [t("pm.generations", { n: historyFor(x).length }), n ? t("pm.refsCount", { n }) : ""].filter(Boolean).join(" · ");
+    b.append(small);
+    b.setAttribute("aria-current", String(x.id === pm.id));
+    li.append(b);
+    ul.append(li);
+  }
+  const prod = state.products.find((x) => x.id === pm.id) || null;
+  for (const f of pmFields()) $(`#pm-${f}`).value = prod ? prod[f] || "" : "";
+  const del = $("#pm-delete");
+  del.hidden = !prod;
+  del.textContent = t("pm.delete");
+  delete del.dataset.armed;
+  $("#pm-status").textContent = "";
+  $("#pm-status").classList.remove("error");
+}
+
+async function pmSave() {
+  const name = $("#pm-product").value.trim();
+  if (!name) {
+    $("#pm-status").textContent = t("pm.needName");
+    $("#pm-status").classList.add("error");
+    $("#pm-product").focus();
+    return null;
+  }
+  let prod = state.products.find((x) => x.id === pm.id);
+  // A new product with the name of an existing one updates that one.
+  if (!prod) prod = state.products.find((x) => sameName(x.product, name));
+  if (!prod) {
+    prod = { id: `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}` };
+    state.products.unshift(prod);
+  }
+  for (const f of pmFields()) prod[f] = $(`#pm-${f}`).value.trim();
+  prod.updated = Date.now();
+  pm.id = prod.id;
+  await save(KEYS.products, state.products);
+  // Keep the brief in step when the product open there was edited.
+  if (prod.id === state.productId) for (const f of PRODUCT_FIELDS) $(`#${f}`).value = prod[f] || "";
+  renderPm();
+  renderProducts();
+  renderHistory();
+  renderStrength();
+  $("#pm-status").textContent = t("pm.saved");
+  return prod;
+}
+
+async function pmUse() {
+  const prod = await pmSave();
+  if (!prod) return;
+  $("#pm-dialog").close();
+  pickProduct(prod.id);
+  toast(t("toast.productLoaded", { product: prod.product }));
+}
+
+async function pmDelete() {
+  const del = $("#pm-delete");
+  const prod = state.products.find((x) => x.id === pm.id);
+  if (!prod) return;
+  if (!del.dataset.armed) {
+    del.dataset.armed = "1";
+    del.textContent = t("products.confirm");
+    setTimeout(() => { if (del.dataset.armed) { delete del.dataset.armed; del.textContent = t("pm.delete"); } }, 4000);
+    return;
+  }
+  state.products = state.products.filter((x) => x.id !== prod.id);
+  if (state.productId === prod.id) state.productId = null;
+  pm.id = state.products[0]?.id || null;
+  await save(KEYS.products, state.products);
+  renderPm();
+  renderProducts();
+  renderHistory();
+  toast(t("toast.productDeleted", { product: prod.product }));
+}
+
+/* ------------------------------------------------------------ chat edits */
+//
+// "Make the first one 30% shorter", "sound more authoritative": the user
+// polishes the generated copy in their own words instead of starting over.
+// Requests go to one Anna agent session per generation (anna.agent.session),
+// which keeps the conversation on the server; its id is saved with the
+// generation, so the same session is attached and refreshed when the
+// generation is reopened from the history. Every message carries the current
+// copy, so rewrites made with the buttons are never lost. If no agent session
+// is available, the same prompt goes to anna.llm.complete with recent turns.
+// The model answers with changes; the app checks each one in code (platform
+// limit, language, invented numbers), applies the good ones, highlights them
+// and keeps an undo for the latest change.
+
+const CHAT_SYSTEM = `You are the copy editor inside the Caption Studio app. The user is a small seller polishing social media and shop copy that the app wrote for one product.
+You have no tools: do not try to browse, search or read files. Work only from the brief and the current copy in each message.
+${SYSTEM.split("\n").slice(1, 6).join("\n")}
+For every request, change only the texts the request is about and keep every other text exactly as it is. "The first text" means variant 1 of the platform the user is looking at, unless they name another. Keep each platform's format and stay under its character limit, hashtags included. Keep the copy language. If a request is unclear, ask a short question instead of changing anything.
+Answer with JSON only, no markdown fences:
+{"reply":"one or two sentences to the user","changes":[{"platform":"instagram","variant":1,"text":"...","hashtags":["word"]}]}
+"variant" counts from 1 within its platform. Leave out "hashtags" to keep them. Use "changes": [] when nothing should change.`;
+
+const chat = { busy: false, cancelled: false, mode: "agent", session: null, runId: null };
+const chatSessions = new Map(); // generation time → AgentSession
+
+class RunError extends Error {
+  constructor(message, extra = {}) { super(message); Object.assign(this, extra); }
+}
+
+function copySnapshot(r) {
+  const ids = r.brief.platforms.filter((id) => r.byPlatform[id]);
+  return ids.map((id) => {
+    const p = PLATFORMS.find((x) => x.id === id);
+    return `[${id}] ${p.name}, limit ${p.limit} characters incl. hashtags, ${p.hashtags ? `${p.hashtags} hashtags max` : "no hashtags"}\n` +
+      r.byPlatform[id].map((v, i) => `  variant ${i + 1}${angleOf(r, v) ? ` (angle: ${angleOf(r, v).name})` : ""}:\n  text: ${JSON.stringify(v.text)}\n  hashtags: ${JSON.stringify(v.hashtags)}`).join("\n");
+  }).join("\n\n");
+}
+
+function chatPrompt(r, request, withRecent) {
+  const brand = state.brands.find((b) => b.name === r.brand) || activeBrand();
+  const recent = withRecent
+    ? (r.chat || []).filter((m) => !m.pending).slice(-7, -1).map((m) => `${m.role === "user" ? "User" : "You"}: ${m.text}`).join("\n")
+    : "";
+  const looking = PLATFORMS.find((x) => x.id === state.tab);
+  return `${langRule(r.brief.language)}
+
+${brandBlock(brand)}
+
+BRIEF:
+${briefBlock(r.brief)}
+${refsBlock(r.brief)}
+CURRENT COPY (this is the latest version; it may have been rewritten since your last answer):
+${copySnapshot(r)}
+${recent ? `\nEARLIER IN THIS CONVERSATION:\n${recent}\n` : ""}
+The user is looking at: ${looking ? `[${looking.id}] ${looking.name}` : "the first platform"}.
+Copy language: ${r.brief.language}. Write "reply" in ${COPY_LANG_FOR_UI[uiLang()] || "English"}.
+
+USER REQUEST:
+${request}`;
+}
+
+async function chatSession(r, fresh) {
+  const key = r.at;
+  if (!fresh && chatSessions.has(key)) return chatSessions.get(key);
+  let s = null;
+  // Reuse the session this generation already had (after a reload or from the history).
+  if (!fresh && r.chatSession && state.anna.agent.session.attach) {
+    try {
+      s = state.anna.agent.session.attach(r.chatSession);
+      if (s.refresh) await s.refresh();
+    } catch {
+      s = null;
+    }
+  }
+  if (!s) {
+    s = await state.anna.agent.session({ submode: "auto", system_prompt: CHAT_SYSTEM });
+    r.chatSession = s.app_session_uuid || null;
+    save(KEYS.history, state.history);
+  }
+  chatSessions.set(key, s);
+  return s;
+}
+
+// Read one run's stream into text; every terminal state is handled.
+async function runAgent(session, content) {
+  let text = "";
+  chat.session = session;
+  for await (const f of session.run({ content })) {
+    if (f.run_id) chat.runId = f.run_id;
+    if (f.event === "sse") {
+      if (f.error) throw new RunError(f.error, { code: f.error_type || "run_error" });
+      const d = f.choices?.[0]?.delta;
+      if (typeof d?.content === "string") text += d.content;
+      else if (d?.task_cancelled) throw new RunError("cancelled", { cancelled: true });
+    } else if (f.event === "error") {
+      throw new RunError(f.message || "run error", { code: f.code || "run_error" });
+    } else if (f.event === "end") {
+      break;
+    }
+  }
+  return text;
+}
+
+async function askChat(r, request) {
+  if (!state.anna) return JSON.stringify({ reply: "Preview mode: connect to Anna to edit by chat.", changes: [] });
+  if (chat.mode === "agent" && state.anna.agent?.session) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      let session;
+      try {
+        session = await chatSession(r, attempt > 0);
+      } catch (e) {
+        console.info("[caption-studio] no agent session, using llm.complete:", e?.code || e?.message);
+        chat.mode = "llm";
+        break;
+      }
+      try {
+        const text = await runAgent(session, `${chatPrompt(r, request, false)}\n\nAnswer with the JSON described in your instructions.`);
+        if (text.trim()) return text;
+        throw new RunError(t("chat.empty"), { code: "empty_completion" });
+      } catch (e) {
+        if (e.cancelled || chat.cancelled) throw new RunError("cancelled", { cancelled: true });
+        // An expired session is replaced once; an empty answer is retried once.
+        const code = `${e.code || ""}`;
+        if (attempt === 0 && /session_(revoked|expired|not_found)|expired|not_found|revoked|empty_completion/i.test(code)) {
+          if (!/empty_completion/i.test(code)) { chatSessions.delete(r.at); r.chatSession = null; }
+          continue;
+        }
+        if (/not_granted|permission|denied|disabled|unavailable|no_agent|queue_timeout/i.test(code)) chat.mode = "llm";
+        console.info("[caption-studio] agent session failed, answering with llm.complete:", code || e.message);
+        break;
+      }
+    }
+    if (chat.cancelled) throw new RunError("cancelled", { cancelled: true });
+  }
+  const res = await state.anna.llm.complete({
+    systemPrompt: CHAT_SYSTEM,
+    messages: [{ role: "user", content: { type: "text", text: chatPrompt(r, request, true) } }],
+    maxTokens: 3000,
+    temperature: 0.5,
+  });
+  return completionText(res);
+}
+
+function parseChat(raw) {
+  let data = null;
+  try { data = extractJson(raw); } catch { data = null; }
+  // Plain text: show it as the answer and change nothing. JSON of another shape: nothing to apply.
+  if (!data) return { reply: String(raw || "").trim().slice(0, 600), changes: [] };
+  if (!("reply" in data) && !("changes" in data)) return { reply: "", changes: [] };
+  return {
+    reply: String(data.reply || "").trim(),
+    changes: (Array.isArray(data.changes) ? data.changes : []).filter((c) => c && typeof c === "object"),
+  };
+}
+
+// Apply the changes that pass the checks; report the others.
+function applyChatChanges(r, changes) {
+  const before = JSON.parse(JSON.stringify(r.byPlatform));
+  const applied = [], refused = [];
+  for (const c of changes) {
+    const id = String(c.platform || "").toLowerCase();
+    const list = r.byPlatform[id];
+    const p = PLATFORMS.find((x) => x.id === id);
+    const i = Number(c.variant) - 1;
+    if (!list || !p || !list[i]) continue;
+    const old = list[i];
+    const text = String(c.text ?? "").trim() || old.text;
+    let hashtags = Array.isArray(c.hashtags)
+      ? c.hashtags.map((h) => String(h).replace(/^#+/, "").replace(/\s+/g, "").trim()).filter(Boolean)
+      : old.hashtags;
+    if (p.hashtags === 0) hashtags = [];
+    hashtags = hashtags.slice(0, Math.max(p.hashtags, 0));
+    if (text === old.text && hashtags.join() === old.hashtags.join()) continue;
+    const label = `${pName(p)} ${i + 1}`;
+    const cand = { ...old, text, hashtags };
+    if (charLen(fullText(cand)) > p.limit) { refused.push(t("chat.tooLong", { item: label, platform: pName(p) })); continue; }
+    if (wrongLanguage(`${text} ${hashtags.join(" ")}`, r.brief.language)) { refused.push(t("chat.wrongLang", { item: label, language: r.brief.language })); continue; }
+    const check = checkVariant(cand, r.brief);
+    list[i] = { angle: old.angle, text, hashtags, uses: check.uses.length ? check.uses : old.uses, invented: check.invented };
+    applied.push({ id, index: i, label });
+  }
+  return { before, applied, refused };
+}
+
+async function sendChat(text) {
+  const r = state.results;
+  const request = String(text || "").trim();
+  if (!r || chat.busy || state.busy || !request) return;
+  r.chat = r.chat || [];
+  r.chat.push({ role: "user", text: request });
+  const pending = { role: "ai", text: t("chat.thinking"), pending: true };
+  r.chat.push(pending);
+  chat.busy = true;
+  chat.cancelled = false;
+  chat.runId = null;
+  $("#chat-input").value = "";
+  renderChat();
+
+  let flash = [];
+  try {
+    const raw = await askChat(r, request);
+    if (chat.cancelled) throw new RunError("cancelled", { cancelled: true });
+    const parsed = parseChat(raw);
+    const res = parsed.changes.length ? applyChatChanges(r, parsed.changes) : { applied: [], refused: [] };
+    const msg = { role: "ai", text: parsed.reply || (res.applied.length ? "" : t("chat.none")) };
+    if (res.applied.length) {
+      msg.changed = res.applied.map((a) => a.label);
+      msg.undo = res.before;
+      flash = res.applied;
+      for (const m of r.chat) delete m.undo; // only the latest change can be undone
+    }
+    if (res.refused.length) msg.refused = res.refused;
+    r.chat[r.chat.indexOf(pending)] = msg;
+  } catch (e) {
+    r.chat[r.chat.indexOf(pending)] = { role: "ai", error: !e.cancelled, text: e.cancelled ? t("chat.cancelled") : t("chat.error", { reason: friendlyError(e) }) };
+  } finally {
+    chat.busy = false;
+    r.chat = r.chat.slice(-30);
+    if (flash.length && !r.byPlatform[state.tab]?.length) state.tab = flash[0].id;
+    if (flash.length && !flash.some((f) => f.id === state.tab)) state.tab = flash[0].id;
+    renderResults();
+    const tags = document.querySelectorAll("#results .tag");
+    for (const f of flash) if (f.id === state.tab) tags[f.index]?.classList.add("flash");
+    save(KEYS.history, state.history);
+  }
+}
+
+function undoChat(msg) {
+  const r = state.results;
+  if (!msg.undo) return;
+  r.byPlatform = msg.undo;
+  delete msg.undo;
+  msg.undone = true;
+  r.chat.push({ role: "ai", text: t("chat.undone") });
+  renderResults();
+  save(KEYS.history, state.history);
+}
+
+function stopChat() {
+  if (!chat.busy) return;
+  chat.cancelled = true;
+  if (chat.session && chat.runId) chat.session.cancel(chat.runId).catch(() => {});
+}
+
+function renderChat() {
+  const r = state.results;
+  $("#chat").hidden = !r;
+  if (!r) return;
+  const log = $("#chat-log");
+  log.innerHTML = "";
+  const msgs = r.chat || [];
+  $("#chat-suggestions").hidden = msgs.length > 0;
+  for (const m of msgs) {
+    const li = document.createElement("li");
+    li.className = `msg ${m.role}${m.error ? " error" : ""}${m.pending ? " pending" : ""}`;
+    const who = document.createElement("span");
+    who.className = "who";
+    who.textContent = m.role === "user" ? t("chat.you") : "Caption Studio";
+    li.append(who);
+    if (m.text) li.append(document.createTextNode(m.text));
+    if (m.changed?.length) {
+      const sum = document.createElement("span");
+      sum.className = "sum";
+      sum.textContent = t("chat.changed", { list: m.changed.join(", ") });
+      li.append(sum);
+    }
+    if (m.refused?.length) {
+      const sum = document.createElement("span");
+      sum.className = "sum bad";
+      sum.textContent = t("chat.refused", { list: m.refused.join("; ") });
+      li.append(sum);
+    }
+    if (m.undo) {
+      const u = button(t("chat.undo"), "mini undo", () => undoChat(m));
+      li.append(document.createElement("br"), u);
+    }
+    log.append(li);
+  }
+  $("#chat-send").hidden = chat.busy;
+  $("#chat-stop").hidden = !chat.busy;
+  $("#chat-input").disabled = chat.busy;
+}
+
 /* -------------------------------------------------------------- products */
 
 // A product profile is the reusable part of a brief: name, facts, selling
@@ -1397,14 +1817,27 @@ function renderProducts() {
     : t(state.products.length ? "products.hintPick" : "products.hintNew");
 }
 
+// Switching products updates the whole view: the brief, and below it the
+// product's latest saved copy, or the empty state if it has none yet. The
+// photo, the selling-point questions and the chat belong to the old product.
 function pickProduct(id) {
   const prod = state.products.find((x) => x.id === id) || null;
   state.productId = prod ? prod.id : null;
   state.historyAll = false;
   for (const f of PRODUCT_FIELDS) $(`#${f}`).value = prod ? prod[f] || "" : "";
+  resetPhoto();
+  closeInterview();
+  const latest = prod ? historyFor(prod)[0] || null : null;
+  state.results = latest;
+  if (latest) {
+    state.tab = latest.brief.platforms.find((x) => latest.byPlatform[x]);
+    for (const i of document.querySelectorAll("#platforms input")) i.checked = latest.brief.platforms.includes(i.value);
+  }
+  setStatus(null);
   if (!prod) $("#product").focus({ preventScroll: true });
   renderStrength();
   renderProducts();
+  renderResults();
   renderHistory();
 }
 
@@ -1512,6 +1945,7 @@ function showResults() {
 /* ------------------------------------------------------------------ boot */
 
 async function boot() {
+  EMPTY = $("#results .empty");
   renderForm();
   applyStaticText();
   $("#ui-lang").value = uiLang();
@@ -1548,6 +1982,12 @@ async function boot() {
     applyBrief(last);
     const prod = state.products.find((x) => sameName(x.product, last.product));
     state.productId = prod ? prod.id : null;
+    // Show this product's latest copy again (no model call).
+    const latest = prod ? historyFor(prod)[0] : null;
+    if (latest) {
+      state.results = latest;
+      state.tab = latest.brief.platforms.find((x) => latest.byPlatform[x]);
+    }
   } else {
     document.querySelector('#platforms input[value="instagram"]').checked = true;
     $("#language").value = COPY_LANG_FOR_UI[uiLang()] || $("#language").value;
@@ -1560,6 +2000,19 @@ async function boot() {
   $("#product-pick").addEventListener("change", (e) => pickProduct(e.target.value));
   $("#product-save").addEventListener("click", () => saveProduct());
   $("#product-delete").addEventListener("click", deleteProduct);
+  $("#product-manage").addEventListener("click", openProductManager);
+  $("#pm-close").addEventListener("click", () => $("#pm-dialog").close());
+  $("#pm-new").addEventListener("click", () => { pm.id = null; renderPm(); $("#pm-product").focus(); });
+  $("#pm-save").addEventListener("click", pmSave);
+  $("#pm-use").addEventListener("click", pmUse);
+  $("#pm-delete").addEventListener("click", pmDelete);
+  $("#pm-form").addEventListener("submit", (e) => e.preventDefault());
+  $("#chat-form").addEventListener("submit", (e) => { e.preventDefault(); sendChat($("#chat-input").value); });
+  $("#chat-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendChat($("#chat-input").value); }
+  });
+  $("#chat-stop").addEventListener("click", stopChat);
+  for (const b of document.querySelectorAll("#chat-suggestions .sugg")) b.addEventListener("click", () => sendChat(b.textContent));
   $("#history-all").addEventListener("click", () => { state.historyAll = true; renderHistory(); });
   $("#interview-btn").addEventListener("click", startInterview);
   $("#interview-add").addEventListener("click", addInterviewAnswers);

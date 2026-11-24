@@ -12,6 +12,10 @@ Built for the [Anna AI App Builder Program](https://dorahacks.io/hackathon/2349/
 
 A one-line prompt like "write an Instagram caption for my ceramic mug" gives the same copy every shop gets: "Elevate your mornings with our handcrafted mug." It says nothing about why this mug is worth buying. Good copy is built on specifics the seller knows and the model doesn't: who buys it, what annoys them about the alternatives, what is really different, and what proof exists.
 
+## What it is (and is not)
+
+Caption Studio is a copywriting tool, not a campaign generator. It does one job: write the words for a product post or listing that could only be about this product and that sound like this seller. Its value is in the parts a plain chat prompt doesn't give you: structured selling points, different angles, checks in code, per-product memory, the seller's own voice from a swipe file, and in-place editing by chat.
+
 ## How Caption Studio works
 
 1. **Product.** Type it in or start from a photo; the vision model fills in what it can see.
@@ -28,13 +32,17 @@ A one-line prompt like "write an Instagram caption for my ceramic mug" gives the
 - **Share.** Pre-filled posts for X and LinkedIn; copy-and-open for Instagram, TikTok and Pinterest; "Copy all platforms".
 - **Start from a photo.** Resized in the browser and read with the host's vision model.
 - **Five interface languages** (English, German, Chinese, Russian, Hindi) and **14 copy languages**. The copy always follows the selected copy language, also when the brief or the photo is in another language: every prompt names the output language at the top, and the result is checked in code (script and common words). Angles, variants and rewrites in the wrong language are redone once, then translated; nothing in the wrong language is shown.
-- **My products.** Every product you write copy for is saved to your account with its facts, selling points and call to action. Pick it again later and the whole brief is filled in; save, rename or delete products by hand.
+- **Ask Caption Studio (chat edits).** Below the copy, ask for any change in your own words: "make the first text 30% shorter", "sound more authoritative", "change the hook for LinkedIn". The request goes to one Anna agent session per generation, together with the current copy, so the AI edits what you see and remembers the conversation. Each change is checked in code (platform limit, copy language, invented numbers) before it is applied; changed texts are highlighted and the latest change can be undone.
+- **Product manager.** One place to manage every product: facts, target audience, unique selling points, proof, the main doubt, call to action and a **swipe file** of your best past posts. The swipe file teaches the copy your voice, rhythm and framing; it is never copied, and numbers from it are flagged like any other number not in the brief.
+- **My products.** Every product you write copy for is saved automatically. Switching products in the brief loads its details and its latest copy (or an empty page for a new product).
 - **Generation history.** The last 20 generations are kept with their copy, angles, platforms and time, filtered to the product you picked. Opening one shows the copy again without a model call, so it costs no tokens.
 - **Light and dark mode.**
 
 ## How AI is used
 
-All calls go through `anna.llm.complete`: one call for the angles, one per platform for the copy (two in parallel), one optional call for the selling-point questions, one for a photo, and one per rewrite. Model output is strict JSON and is validated before it is shown. Brand voices, product profiles, the last brief and the history are stored per user with `anna.storage`.
+Generation goes through `anna.llm.complete`: one call for the angles, one per platform for the copy (two in parallel), one optional call for the selling-point questions, one for a photo, and one per rewrite.
+
+Chat edits use `anna.agent.session` (submode `auto`, a system prompt with the editing rules and a JSON answer format, no tools). One session belongs to one generation; its id is saved with the generation, so reopening it from the history attaches and refreshes the same session instead of starting over. Every message carries the brief and the current copy, so rewrites made with the buttons are never lost. All terminal states are handled: streamed text, `task_cancelled` (the Stop button calls `cancel`), error frames, empty answers (retried once) and expired sessions (replaced once). If no agent session is available, the same request goes to `anna.llm.complete` with the recent turns. Model output is strict JSON and is validated before it is shown. Brand voices, product profiles with their swipe files, the last brief and the history (with each generation's chat) are stored per user with `anna.storage`.
 
 ## Project layout
 

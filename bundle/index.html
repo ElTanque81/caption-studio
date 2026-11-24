@@ -39,6 +39,7 @@
               <span class="row-links">
                 <button type="button" class="link" id="product-save" data-i18n="products.save">Save product</button>
                 <button type="button" class="link danger" id="product-delete" data-i18n="products.delete" hidden>Delete</button>
+                <button type="button" class="link" id="product-manage" data-i18n="products.manage">Manage</button>
               </span>
             </div>
             <select id="product-pick"></select>
@@ -161,6 +162,26 @@
             <p data-i18n="empty.body">Describe a product on the left and choose where it will be posted. Each variant comes with hashtags and a length check for that platform.</p>
           </div>
         </div>
+        <section class="chat" id="chat" hidden data-i18n-aria="chat.title" aria-label="Ask Caption Studio">
+          <div class="chat-head">
+            <h2 data-i18n="chat.title">Ask Caption Studio</h2>
+            <p class="chat-hint" data-i18n="chat.hint">Ask for any change in your own words. It works on the copy above and remembers the conversation.</p>
+          </div>
+          <ol class="chat-log" id="chat-log" aria-live="polite"></ol>
+          <div class="suggestions" id="chat-suggestions">
+            <button type="button" class="sugg" data-i18n="chat.sugg1">Make the first text 30% shorter</button>
+            <button type="button" class="sugg" data-i18n="chat.sugg2">Sound more authoritative</button>
+            <button type="button" class="sugg" data-i18n="chat.sugg3">Give every text a stronger hook</button>
+            <button type="button" class="sugg" data-i18n="chat.sugg4">Use fewer emoji</button>
+          </div>
+          <form class="chat-form" id="chat-form" autocomplete="off">
+            <label class="sr-only" for="chat-input" data-i18n="chat.title">Ask Caption Studio</label>
+            <textarea id="chat-input" rows="2" maxlength="1000" data-i18n-ph="chat.ph"></textarea>
+            <button type="submit" class="primary small" id="chat-send" data-i18n="chat.send">Send</button>
+            <button type="button" class="ghost" id="chat-stop" data-i18n="chat.stop" hidden>Stop</button>
+          </form>
+        </section>
+
         <section class="history" id="history-section" data-i18n-aria="history.title" aria-label="Generation history">
           <div class="row-between">
             <h2 id="history-title" data-i18n="history.title">Generation history</h2>
@@ -171,6 +192,49 @@
         </section>
       </main>
     </div>
+
+    <dialog id="pm-dialog" class="pm-dialog">
+      <form method="dialog" id="pm-form" autocomplete="off">
+        <div class="pm-top">
+          <div>
+            <h2 data-i18n="pm.title">Product manager</h2>
+            <p class="hint" data-i18n="pm.hint">Everything Caption Studio knows about each product, saved to your account.</p>
+          </div>
+          <button type="button" class="ghost" id="pm-close" data-i18n="pm.close">Close</button>
+        </div>
+        <div class="pm-body">
+          <nav class="pm-list" data-i18n-aria="pm.title" aria-label="Products">
+            <button type="button" class="ghost pm-new" id="pm-new" data-i18n="pm.new">+ New product</button>
+            <ul id="pm-items"></ul>
+          </nav>
+          <div class="pm-edit">
+            <div class="field"><label for="pm-product" data-i18n="product.label">Product</label><input id="pm-product" maxlength="120" data-i18n-ph="product.ph" /></div>
+            <div class="field"><label for="pm-details" data-i18n="details.label">Product facts</label><textarea id="pm-details" rows="2" maxlength="1500" data-i18n-ph="details.ph"></textarea></div>
+            <p class="pm-group" data-i18n="pm.audience">Target audience</p>
+            <div class="field"><label for="pm-persona" data-i18n="persona.label">Who buys it, and when?</label><textarea id="pm-persona" rows="2" maxlength="400" data-i18n-ph="persona.ph"></textarea></div>
+            <div class="field"><label for="pm-pain" data-i18n="pain.label">What problem or frustration does it fix?</label><textarea id="pm-pain" rows="2" maxlength="400" data-i18n-ph="pain.ph"></textarea></div>
+            <p class="pm-group" data-i18n="pm.usps">Unique selling points</p>
+            <div class="field"><label for="pm-unique" data-i18n="unique.label">What makes yours different?</label><textarea id="pm-unique" rows="2" maxlength="500" data-i18n-ph="unique.ph"></textarea></div>
+            <div class="field"><label for="pm-proof" data-i18n="proof.label">Proof you can show</label><textarea id="pm-proof" rows="2" maxlength="400" data-i18n-ph="proof.ph"></textarea></div>
+            <div class="field"><label for="pm-objection" data-i18n="objection.label">Biggest doubt, and your answer</label><textarea id="pm-objection" rows="2" maxlength="400" data-i18n-ph="objection.ph"></textarea></div>
+            <div class="field"><label for="pm-cta" data-i18n="cta.label">Call to action</label><input id="pm-cta" maxlength="120" data-i18n-ph="cta.ph" /></div>
+            <p class="pm-group" data-i18n="pm.swipe">Swipe file</p>
+            <div class="field">
+              <label for="pm-refs" data-i18n="pm.refs">Your best past posts (optional)</label>
+              <textarea id="pm-refs" rows="5" maxlength="6000" data-i18n-ph="pm.refsPh"></textarea>
+              <p class="field-hint" id="pm-refs-hint" data-i18n="pm.refsHint">Paste up to 5 posts that worked well, separated by a line with ---. Caption Studio matches their voice, rhythm and framing, but never copies them.</p>
+            </div>
+            <p class="status" id="pm-status" role="status" aria-live="polite"></p>
+            <div class="dialog-actions">
+              <button type="button" class="link danger" id="pm-delete" data-i18n="pm.delete">Delete</button>
+              <span class="spacer"></span>
+              <button type="button" class="ghost" id="pm-save" data-i18n="pm.save">Save</button>
+              <button type="button" class="primary small" id="pm-use" data-i18n="pm.use">Save and use</button>
+            </div>
+          </div>
+        </div>
+      </form>
+    </dialog>
 
     <dialog id="brand-dialog">
       <form method="dialog" id="brand-form">

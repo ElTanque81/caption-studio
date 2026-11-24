@@ -31,6 +31,8 @@ Output in 12 languages. The last 12 results are saved and can be reopened.
 - Rewrites send a single variant back with one targeted instruction.
 - Guardrail: the prompt forbids inventing prices, materials, awards or discounts the user did not provide.
 - Brand voices, product profiles, the last brief and the generation history persist per user with `anna.storage`; reopening past copy costs no tokens.
+- Chat edits ("make the first text 30% shorter", "change the hook for LinkedIn") run in one `anna.agent.session` per generation that receives the current copy with every message and is re-attached when the generation is reopened. Each change is checked in code before it is applied and can be undone.
+- A product manager keeps facts, target audience, selling points and a swipe file of the seller's best past posts per product; the swipe file steers voice and framing without being copied.
 
 ### Fit with Anna
 Caption Studio is a pure Anna App: a static SPA bundle running in the Anna iframe, using the host LLM and host storage. No separate backend, no API keys, no extra accounts — install and start writing.
@@ -40,9 +42,7 @@ Etsy and Shopify sellers, marketplace resellers, social media managers and freel
 
 ### Roadmap
 - Inline use in chat: `#caption-studio write an Instagram caption for…`
-- Image input: upload a product photo and let a vision model draft the brief.
 - Content calendar export (CSV) for a week of posts.
-- Brand voice import from existing posts.
 
 ## Links
 - Code: https://github.com/ElTanque81/caption-studio
