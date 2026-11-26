@@ -1045,12 +1045,15 @@ function friendlyError(err) {
 
 /* --------------------------------------------------------------- results */
 
-function renderResults() {
+// still: re-render without the "hang" entry animation (after chat edits and
+// undo), so the cards do not swing in again and the page does not flicker.
+function renderResults({ still = false } = {}) {
   const r = state.results;
   const tabs = $("#tabs");
   const box = $("#results");
   tabs.innerHTML = "";
   box.innerHTML = "";
+  box.classList.toggle("still", still);
   if (!r) {
     // Nothing for this product yet: back to the empty state.
     $("#angles").hidden = true;
@@ -1086,7 +1089,18 @@ function renderResults() {
 
   if (!r.byPlatform[state.tab]) state.tab = ids[0];
   const p = PLATFORMS.find((x) => x.id === state.tab);
-  r.byPlatform[state.tab].forEach((v, i) => box.append(renderTag(p, v, i)));
+  r.byPlatform[state.tab].forEach((v, i) => {
+    const tag = renderTag(p, v, i);
+    // Texts changed by the latest chat request keep a quiet "Edited" mark.
+    if (still && (state.edited || []).includes(`${p.id}:${i}`)) {
+      tag.classList.add("edited");
+      const badge = document.createElement("span");
+      badge.className = "edited-badge";
+      badge.textContent = t("chat.edited");
+      tag.append(badge);
+    }
+    box.append(tag);
+  });
   renderChat();
 }
 
@@ -1692,6 +1706,70 @@ function applyChatChanges(r, changes) {
   return { before, applied, refused };
 }
 
+/* A request about length ("30% shorter", "kürzer", "更短") is checked in code:
+   the model often trims only a few words. Targets that are missed get one
+   rewrite with an explicit character limit, the same way the Shorter button works. */
+const SHORTER_RE = /short|concise|tighten|trim|cut|kürz|kurz|knapp|korot|корот|сократ|сжат|短|缩|精简|छोटा|संक्षिप्त/i;
+const LONGER_RE = /longer|expand|lengthen|läng|ausführlich|длинн|подробн|长|扩|लंबा|विस्तार/i;
+const FIRST_RE = /first|1st|erste|ersten|第一|перв|पहल/i;
+const ALL_RE = /\ball\b|every|each|alle|jede|所有|每|все|кажд|सभी|हर/i;
+
+function lengthIntent(request) {
+  const pct = Number((request.match(/(\d{1,2})\s*%/) || [])[1]) || 0;
+  if (SHORTER_RE.test(request) && !LONGER_RE.test(request)) return { kind: "shorter", ratio: pct ? 1 - pct / 100 : 0.7 };
+  if (LONGER_RE.test(request) && !SHORTER_RE.test(request)) return { kind: "longer", ratio: pct ? 1 + pct / 100 : 1.3 };
+  return null;
+}
+
+async function enforceLength(r, intent, request, before, applied) {
+  // Which texts the request is about: what the model changed, or else the
+  // first text (or all texts) of the platform the user is looking at.
+  let targets = applied.map((a) => ({ id: a.id, index: a.index }));
+  if (!targets.length && r.byPlatform[state.tab]) {
+    targets = ALL_RE.test(request) && !FIRST_RE.test(request)
+      ? r.byPlatform[state.tab].map((_, index) => ({ id: state.tab, index }))
+      : [{ id: state.tab, index: 0 }];
+  }
+  const notes = [], done = [];
+  const brand = state.brands.find((b) => b.name === r.brand) || activeBrand();
+  for (const { id, index } of targets) {
+    const p = PLATFORMS.find((x) => x.id === id);
+    const old = before[id]?.[index];
+    const cur = r.byPlatform[id]?.[index];
+    if (!p || !old || !cur) continue;
+    const from = charLen(old.text);
+    const goal = intent.kind === "shorter"
+      ? Math.max(minLength(old.text), Math.round(from * intent.ratio))
+      : Math.min(maxLength(p, old), Math.round(from * intent.ratio));
+    const ok = (len) => (intent.kind === "shorter" ? len <= goal * 1.08 + 3 : len >= goal * 0.92 && len <= maxLength(p, old));
+    let best = cur;
+    if (!ok(charLen(cur.text))) {
+      for (let attempt = 0; attempt < 2 && !ok(charLen(best.text)); attempt++) {
+        try {
+          const limit = intent.kind === "shorter" ? Math.round(goal * (attempt ? 0.9 : 1)) : goal;
+          const [cand] = parseVariants(await ask(rewritePrompt(brand, p, r.brief, old, intent.kind, limit), intent.kind === "shorter" ? 700 : 900));
+          if (wrongLanguage(cand.text, r.brief.language)) continue;
+          const len = charLen(cand.text), bestLen = charLen(best.text);
+          const better = intent.kind === "shorter" ? len < bestLen : len > bestLen && len <= maxLength(p, old);
+          if (better) best = { ...cand, hashtags: p.hashtags === 0 ? [] : (cand.hashtags.length ? cand.hashtags : old.hashtags).slice(0, Math.max(old.hashtags.length, 1)) };
+        } catch {
+          break;
+        }
+      }
+      if (best !== cur) {
+        const check = checkVariant(best, r.brief);
+        r.byPlatform[id][index] = { angle: old.angle, text: best.text, hashtags: best.hashtags, uses: check.uses.length ? check.uses : old.uses, invented: check.invented };
+      }
+    }
+    const to = charLen(r.byPlatform[id][index].text);
+    if (to === from) continue;
+    const pct = Math.round(((to - from) / from) * 100);
+    notes.push(t("chat.length", { item: `${pName(p)} ${index + 1}`, from, to, pct: `${pct > 0 ? "+" : ""}${pct}%` }));
+    done.push({ id, index, label: `${pName(p)} ${index + 1}` });
+  }
+  return { notes, done };
+}
+
 async function sendChat(text) {
   const r = state.results;
   const request = String(text || "").trim();
@@ -1711,11 +1789,21 @@ async function sendChat(text) {
     const raw = await askChat(r, request);
     if (chat.cancelled) throw new RunError("cancelled", { cancelled: true });
     const parsed = parseChat(raw);
-    const res = parsed.changes.length ? applyChatChanges(r, parsed.changes) : { applied: [], refused: [] };
+    const before = JSON.parse(JSON.stringify(r.byPlatform));
+    const res = parsed.changes.length ? applyChatChanges(r, parsed.changes) : { before, applied: [], refused: [] };
+    const intent = lengthIntent(request);
+    let lengthNotes = [];
+    if (intent) {
+      const { notes, done } = await enforceLength(r, intent, request, before, res.applied);
+      lengthNotes = notes;
+      for (const d of done) if (!res.applied.some((a) => a.id === d.id && a.index === d.index)) res.applied.push(d);
+    }
+    if (chat.cancelled) { r.byPlatform = before; throw new RunError("cancelled", { cancelled: true }); }
     const msg = { role: "ai", text: parsed.reply || (res.applied.length ? "" : t("chat.none")) };
     if (res.applied.length) {
       msg.changed = res.applied.map((a) => a.label);
-      msg.undo = res.before;
+      msg.undo = before;
+      if (lengthNotes.length) msg.lengths = lengthNotes;
       flash = res.applied;
       for (const m of r.chat) delete m.undo; // only the latest change can be undone
     }
@@ -1728,9 +1816,8 @@ async function sendChat(text) {
     r.chat = r.chat.slice(-30);
     if (flash.length && !r.byPlatform[state.tab]?.length) state.tab = flash[0].id;
     if (flash.length && !flash.some((f) => f.id === state.tab)) state.tab = flash[0].id;
-    renderResults();
-    const tags = document.querySelectorAll("#results .tag");
-    for (const f of flash) if (f.id === state.tab) tags[f.index]?.classList.add("flash");
+    state.edited = flash.map((f) => `${f.id}:${f.index}`);
+    renderResults({ still: true });
     save(KEYS.history, state.history);
   }
 }
@@ -1742,7 +1829,8 @@ function undoChat(msg) {
   delete msg.undo;
   msg.undone = true;
   r.chat.push({ role: "ai", text: t("chat.undone") });
-  renderResults();
+  state.edited = [];
+  renderResults({ still: true });
   save(KEYS.history, state.history);
 }
 
@@ -1772,6 +1860,12 @@ function renderChat() {
       const sum = document.createElement("span");
       sum.className = "sum";
       sum.textContent = t("chat.changed", { list: m.changed.join(", ") });
+      li.append(sum);
+    }
+    if (m.lengths?.length) {
+      const sum = document.createElement("span");
+      sum.className = "sum";
+      sum.textContent = m.lengths.join(" · ");
       li.append(sum);
     }
     if (m.refused?.length) {

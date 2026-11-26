@@ -572,8 +572,13 @@ dialog h2 { margin: 0 0 4px; font-size: 18px; }
 .chat-form { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end; }
 .chat-form textarea { resize: vertical; min-height: 44px; }
 .chat-form [hidden] { display: none; }
-.tag.flash { animation: flash 1.6s ease-out; }
-@keyframes flash { 0% { box-shadow: 0 0 0 3px var(--marker); } 100% { box-shadow: 0 0 0 0 transparent; } }
+#results.still .tag { animation: none; }
+.edited-badge {
+  position: absolute; top: 12px; right: 26px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+  padding: 2px 8px; border-radius: 999px;
+  background: var(--marker); color: var(--ink);
+}
 
 /* ---------- 0.5: product manager ---------- */
 
